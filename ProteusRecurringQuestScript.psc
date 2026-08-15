@@ -5959,13 +5959,13 @@ String Function Proteus_SelectPresetSpawnImport()
 			String value
 			while PLAYERPRESETFormKey
 				value = jmap.GetStr(jPLAYERPRESETFormList,PLAYERPRESETFormKey, none)
-				int k = 0
+				int duplicateIndex = 0
 				bool include = true
-				while k < loadedPresetCount
-					if(value  == presetsLoaded[k])
+				while duplicateIndex < loadedPresetCount
+					if(value  == presetsLoaded[duplicateIndex])
 						include = false
 					endIf
-					k+=1
+					duplicateIndex+=1
 				endWhile
 				if include == true
 					presetsLoaded[loadedPresetCount] = value
@@ -8685,16 +8685,16 @@ function Proteus_SaveFollowers(String playerName, Actor[] playerFollowers)
 				while z < aliasCount
 					Actor addActor = (currentPlayerCharacterQuest.GetNthAlias(z) as ReferenceAlias).GetActorRef()
 					y = 0
-					bool addThis = true
+					bool addOtherFollower = true
 					while y < FollowerQuestAliasCount
 						if (FollowerQuest.GetNthAlias(y) as ReferenceAlias).GetActorRef() == addActor
-							addThis = false
+							addOtherFollower = false
 							y=999
 						endIf
 						y+=1
 					EndWhile
 
-					if addThis == true
+					if addOtherFollower == true
 						y = 0
 						while y < FollowerQuestAliasCount
 							if (FollowerQuest.GetNthAlias(y) as ReferenceAlias).GetActorRef() == NONE

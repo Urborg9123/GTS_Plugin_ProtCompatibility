@@ -12,53 +12,99 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v6
 
       - name: Download Caprica
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
           $url = 'https://github.com/Orvid/Caprica/releases/download/v0.3.0/Caprica.v0.3.0.7z'
           Invoke-WebRequest -Uri $url -OutFile caprica.7z
+
           New-Item -ItemType Directory -Force -Path tools\caprica | Out-Null
           & 'C:\Program Files\7-Zip\7z.exe' x caprica.7z '-otools\caprica' -y
-          $caprica = Get-ChildItem tools\caprica -Recurse -Filter Caprica.exe | Select-Object -First 1
-          if (-not $caprica) { throw 'Caprica.exe was not found after extraction.' }
+          if ($LASTEXITCODE -ne 0) {
+            throw "7-Zip extraction failed with exit code $LASTEXITCODE"
+          }
+
+          $caprica = Get-ChildItem tools\caprica -Recurse -Filter Caprica.exe |
+            Select-Object -First 1
+
+          if (-not $caprica) {
+            throw 'Caprica.exe was not found after extraction.'
+          }
+
           Copy-Item $caprica.FullName tools\Caprica.exe -Force
-          & tools\Caprica.exe --help
+
+          if (-not (Test-Path tools\Caprica.exe)) {
+            throw 'Caprica.exe was not copied successfully.'
+          }
+
+          Write-Host "Caprica ready: $(Resolve-Path tools\Caprica.exe)"
 
       - name: Fetch Skyrim and SKSE Papyrus headers
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
           git clone --depth 1 https://github.com/Rukan/Grimy-Skyrim-Papyrus-Source.git deps\skyrim
+          if ($LASTEXITCODE -ne 0) {
+            throw "Header repository clone failed with exit code $LASTEXITCODE"
+          }
+
           New-Item -ItemType Directory -Force -Path build\imports | Out-Null
-          Get-ChildItem deps\skyrim -Filter *.psc -File | Copy-Item -Destination build\imports -Force
-          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File | Copy-Item -Destination build\imports -Force
+
+          Get-ChildItem deps\skyrim -Filter *.psc -File |
+            Copy-Item -Destination build\imports -Force
+
+          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File |
+            Copy-Item -Destination build\imports -Force
+
           Write-Host ('Header count: ' + (Get-ChildItem build\imports -Filter *.psc -File).Count)
 
       - name: Compile ProteusRecurringQuestScript
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
           New-Item -ItemType Directory -Force -Path build\out | Out-Null
-          & tools\Caprica.exe --game skyrim --import "$PWD\build\imports" --output "$PWD\build\out" "$PWD\ProteusCompat\Source\ProteusRecurringQuestScript.psc"
-          if ($LASTEXITCODE -ne 0) { throw "Caprica failed with exit code $LASTEXITCODE" }
-          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex | Select-Object -First 1
-          if (-not $pex) { throw 'ProteusRecurringQuestScript.pex was not produced.' }
+
+          & tools\Caprica.exe `
+            --game skyrim `
+            --import "$PWD\build\imports" `
+            --output "$PWD\build\out" `
+            "$PWD\ProteusCompat\Source\ProteusRecurringQuestScript.psc"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Caprica failed with exit code $LASTEXITCODE"
+          }
+
+          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
+            Select-Object -First 1
+
+          if (-not $pex) {
+            throw 'ProteusRecurringQuestScript.pex was not produced.'
+          }
+
           Write-Host "Compiled: $($pex.FullName)"
 
       - name: Stage compatibility package
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+
           New-Item -ItemType Directory -Force -Path artifact\Scripts | Out-Null
           New-Item -ItemType Directory -Force -Path artifact\Source\Scripts | Out-Null
-          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex | Select-Object -First 1
+
+          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
+            Select-Object -First 1
+
           Copy-Item $pex.FullName artifact\Scripts\ProteusRecurringQuestScript.pex
           Copy-Item ProteusCompat\Source\ProteusRecurringQuestScript.psc artifact\Source\Scripts\ProteusRecurringQuestScript.psc
           Copy-Item ProteusCompat\Headers\GTSPlugin.psc artifact\Source\Scripts\GTSPlugin.psc
           Copy-Item ProteusCompat\Plugin\ProteusGTSCustomPerkPatch.esp artifact\ProteusGTSCustomPerkPatch.esp
+
           Get-ChildItem artifact -Recurse | Select-Object FullName, Length
 
       - name: Upload Proteus GTS Papyrus artifact

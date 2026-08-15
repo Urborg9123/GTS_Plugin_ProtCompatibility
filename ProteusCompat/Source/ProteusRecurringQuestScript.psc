@@ -536,6 +536,35 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 	ActorValueInfo.GetActorValueInfoByName("twoHanded").SetSkillExperience(0)
 	Game.SetPerkPoints(0)
 
+	;GTS compatibility: a Proteus "New Character" must start with fresh GTS progression.
+	;The previous character has already been saved above, so it is now safe to clear
+	;the shared player globals / native kill counter before Proteus removes perks/spells.
+	if(gtsActive == TRUE)
+		GlobalVariable GTSSkillLevelReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
+		GlobalVariable GTSSkillProgressReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
+		GlobalVariable GTSSkillRatioReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
+		GlobalVariable GTSSkillLegendaryReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
+		GlobalVariable GTSSkillPerkPointsReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
+
+		if GTSSkillLevelReset != NONE
+			GTSSkillLevelReset.SetValue(0.0)
+		endIf
+		if GTSSkillProgressReset != NONE
+			GTSSkillProgressReset.SetValue(0.0)
+		endIf
+		if GTSSkillRatioReset != NONE
+			GTSSkillRatioReset.SetValue(0.0)
+		endIf
+		if GTSSkillLegendaryReset != NONE
+			GTSSkillLegendaryReset.SetValue(0.0)
+		endIf
+		if GTSSkillPerkPointsReset != NONE
+			GTSSkillPerkPointsReset.SetValue(0.0)
+		endIf
+
+		GTSPlugin.SetTotalKills(player, 0)
+	endIf
+
 	;reset vampirism status
 	Proteus_Vampirism(3)
 

@@ -67,6 +67,16 @@ jobs:
           'Scriptname Container extends Form Hidden' |
             Set-Content -Path build\imports\Container.psc -Encoding ASCII
 
+          # The lightweight Skyrim/SKSE source pack is old and lacks the
+          # light-plugin helpers added to modern SKSE64's Game.psc.
+          # Proteus uses both of these when building its plugin list.
+          @(
+            ''
+            '; SKSE64 light-plugin functions required by Proteus'
+            'int Function GetLightModCount() native global'
+            'string Function GetLightModName(int idx) native global'
+          ) | Add-Content -Path build\imports\Game.psc -Encoding ASCII
+
           Write-Host ('Header count: ' + (Get-ChildItem build\imports -Filter *.psc -File).Count)
 
       - name: Create Skyrim Papyrus flags

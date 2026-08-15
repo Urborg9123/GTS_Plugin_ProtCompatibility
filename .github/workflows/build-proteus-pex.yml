@@ -68,19 +68,27 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          New-Item -ItemType Directory -Force -Path build\out | Out-Null
+          $repo = $PWD.Path
+          New-Item -ItemType Directory -Force -Path "$repo\build\out" | Out-Null
 
-          & tools\Caprica.exe `
+          # Skyrim Papyrus does not use folder-based namespaces here.
+          # Run Caprica from the script's own directory so the file is
+          # compiled as "ProteusRecurringQuestScript", not "ProteusCompat:Source:...".
+          Set-Location "$repo\ProteusCompat\Source"
+
+          & "$repo\tools\Caprica.exe" `
             --game skyrim `
-            --import "$PWD\build\imports" `
-            --output "$PWD\build\out" `
-            "$PWD\ProteusCompat\Source\ProteusRecurringQuestScript.psc"
+            --import "$repo\build\imports" `
+            --output "$repo\build\out" `
+            "ProteusRecurringQuestScript.psc"
 
           if ($LASTEXITCODE -ne 0) {
             throw "Caprica failed with exit code $LASTEXITCODE"
           }
 
-          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
+          Set-Location $repo
+
+          $pex = Get-ChildItem "$repo\build\out" -Recurse -Filter ProteusRecurringQuestScript.pex |
             Select-Object -First 1
 
           if (-not $pex) {

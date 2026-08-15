@@ -1,4 +1,5 @@
 #include "Papyrus/Plugin.hpp"
+#include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
 #include "Config/Config.hpp"
@@ -26,6 +27,28 @@ using namespace GTS;
 namespace {
 
 	constexpr std::string_view PapyrusClass = "GTSPlugin";
+
+    int GetTotalKills(StaticFunctionTag*, Actor* actor) {
+        if (!actor) {
+            return 0;
+        }
+
+        if (auto data = Persistent::GetKillCountData(actor)) {
+            return static_cast<int>(data->iTotalKills);
+        }
+
+        return 0;
+    }
+
+    void SetTotalKills(StaticFunctionTag*, Actor* actor, int count) {
+        if (!actor) {
+            return;
+        }
+
+        if (auto data = Persistent::GetKillCountData(actor)) {
+            data->iTotalKills = static_cast<std::uint32_t>(count > 0 ? count : 0);
+        }
+    }
 
 	void ResetQuestProgression(StaticFunctionTag*) {
 		GTS::ResetQuest();
@@ -91,6 +114,9 @@ namespace GTS {
 		vm->RegisterFunction("ResetQuestProgression", PapyrusClass, ResetQuestProgression);
 		vm->RegisterFunction("Quest_GetProgression", PapyrusClass, Quest_GetProgression);
 		vm->RegisterFunction("WasDragonEaten", PapyrusClass, WasDragonEaten);
+
+		vm->RegisterFunction("GetTotalKills", PapyrusClass, GetTotalKills);
+		vm->RegisterFunction("SetTotalKills", PapyrusClass, SetTotalKills);
 
 		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);

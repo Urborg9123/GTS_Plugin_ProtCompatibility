@@ -7,6 +7,10 @@ Function ResetQuestProgression() global native
 Float function Quest_GetProgression(int aiStage) global native
 Bool function WasDragonEaten() global native
 
+; Proteus compatibility
+Int Function GetTotalKills(Actor akActor) global native
+Function SetTotalKills(Actor akActor, Int aiCount) global native
+
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native
 

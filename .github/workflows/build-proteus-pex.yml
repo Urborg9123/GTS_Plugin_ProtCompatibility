@@ -61,6 +61,12 @@ jobs:
           Get-ChildItem ProteusCompat\Headers -Filter *.psc -File |
             Copy-Item -Destination build\imports -Force
 
+          # Container is a vanilla Skyrim Papyrus form type, but it is missing
+          # from the lightweight source set we use for CI.  Proteus declares
+          # one Container property, so provide the minimal compile-time header.
+          'Scriptname Container extends Form Hidden' |
+            Set-Content -Path build\imports\Container.psc -Encoding ASCII
+
           Write-Host ('Header count: ' + (Get-ChildItem build\imports -Filter *.psc -File).Count)
 
       - name: Create Skyrim Papyrus flags

@@ -63,6 +63,35 @@ jobs:
 
           Write-Host ('Header count: ' + (Get-ChildItem build\imports -Filter *.psc -File).Count)
 
+      - name: Create Skyrim Papyrus flags
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+
+          $flags = @(
+            '// List of flags for TESV'
+            ''
+            '// Flag hides the script or property from the game editor'
+            'Flag Hidden 0'
+            '{'
+            '    Script'
+            '    Property'
+            '}'
+            ''
+            '// Flag on an object designates it as the script the condition system will look at'
+            '// Flag on a variable allows the script variable to be examined by the condition system'
+            'Flag Conditional 1'
+            '{'
+            '    Script'
+            '    Variable'
+            '}'
+          )
+
+          $flags | Set-Content -Path build\TESV_Papyrus_Flags.flg -Encoding ASCII
+          Get-Content build\TESV_Papyrus_Flags.flg
+
       - name: Compile ProteusRecurringQuestScript
         shell: pwsh
         run: |
@@ -71,13 +100,11 @@ jobs:
           $repo = $PWD.Path
           New-Item -ItemType Directory -Force -Path "$repo\build\out" | Out-Null
 
-          # Skyrim Papyrus does not use folder-based namespaces here.
-          # Run Caprica from the script's own directory so the file is
-          # compiled as "ProteusRecurringQuestScript", not "ProteusCompat:Source:...".
           Set-Location "$repo\ProteusCompat\Source"
 
           & "$repo\tools\Caprica.exe" `
             --game skyrim `
+            --flags "$repo\build\TESV_Papyrus_Flags.flg" `
             --import "$repo\build\imports" `
             --output "$repo\build\out" `
             "ProteusRecurringQuestScript.psc"

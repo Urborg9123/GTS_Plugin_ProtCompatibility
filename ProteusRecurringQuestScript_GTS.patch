@@ -1,0 +1,164 @@
+--- ProteusRecurringQuestScript.psc.orig
++++ ProteusRecurringQuestScript.psc
+@@ -343,6 +343,8 @@
+ Bool vigilantPerksActive ;Vigilant Perks
+ Bool glenmorilPerksActive ;Glenmoril Perks
+ Bool handtohandActive ;Hand to Hands Perks
++Bool gtsActive ;Giantess Mod - Size Matters NG
++String gtsPatchName = ""
+ Bool pmwActive ;Phenderix Magic World
+ Bool apocalypseActive ;Apocalypse - Magic of Skyrim
+ Bool pmeActive ;Phenderix Magic Evolved
+@@ -1047,6 +1049,8 @@
+ 	vigilantPerksActive  = false
+ 	glenmorilPerksActive  = false
+ 	handtohandActive  = false
++	gtsActive = false
++	gtsPatchName = ""
+ 	pmwActive  = false
+ 	apocalypseActive  = false
+ 	edmrActive  = false
+@@ -1183,6 +1187,25 @@
+ 			dragonbornCustomPerkActive = true
+ 		else
+ 			Debug.Notification("Proteus Dragonborn Custom Perk patch not installed. Please install it!")
++		endIf
++	endIf
++
++	;Giantess Mod - Size Matters NG
++	targetModIndex = Game.GetModByName("GTS.esp")
++	if TargetModIndex != 255
++		targetModIndex = Game.GetModByName("Proteus - GTS Custom Perk Patch.esp")
++		if TargetModIndex != 255
++			gtsPatchName = "Proteus - GTS Custom Perk Patch.esp"
++		else
++			targetModIndex = Game.GetModByName("ProteusGTSCustomPerkPatch.esp")
++			if TargetModIndex != 255
++				gtsPatchName = "ProteusGTSCustomPerkPatch.esp"
++			endIf
++		endIf
++		if gtsPatchName != ""
++			gtsActive = true
++		else
++			Debug.Notification("Proteus GTS compatibility patch not installed. Please install it!")
+ 		endIf
+ 	endIf
+ 
+@@ -2515,6 +2538,45 @@
+ 						GlobalVariable DragonbornCustomPerksSkillProgress = Game.GetFormFromFile(0x000801, "DragonbornShoutPerks.esp") as GlobalVariable
+ 						DragonbornCustomPerksSkillProgress.SetValue(value as Float)
+ 					endIf
++				elseif stat == "GTSSkillLevel"
++					if(gtsActive == TRUE)
++						GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
++						if GTSSkillLevel != NONE
++							GTSSkillLevel.SetValue(value as Float)
++						endIf
++					endIf
++				elseif stat == "GTSSkillProgress"
++					if(gtsActive == TRUE)
++						GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
++						if GTSSkillProgress != NONE
++							GTSSkillProgress.SetValue(value as Float)
++						endIf
++					endIf
++				elseif stat == "GTSSkillRatio"
++					if(gtsActive == TRUE)
++						GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
++						if GTSSkillRatio != NONE
++							GTSSkillRatio.SetValue(value as Float)
++						endIf
++					endIf
++				elseif stat == "GTSSkillLegendary"
++					if(gtsActive == TRUE)
++						GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
++						if GTSSkillLegendary != NONE
++							GTSSkillLegendary.SetValue(value as Float)
++						endIf
++					endIf
++				elseif stat == "GTSSkillPerkPoints"
++					if(gtsActive == TRUE)
++						GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
++						if GTSSkillPerkPoints != NONE
++							GTSSkillPerkPoints.SetValue(value as Float)
++						endIf
++					endIf
++				elseif stat == "GTSTotalKills"
++					if(gtsActive == TRUE)
++						GTSPlugin.SetTotalKills(target, value as Int)
++					endIf
+ 				endIf
+ 				stat = jmap.nextKey(jCustomSkillsList, stat, "")
+ 				j += 1
+@@ -2675,6 +2737,29 @@
+ 		jmap.SetStr(jCustomSkillsForms, "DragonbornCustomPerksSkillProgress", DragonbornCustomPerksSkillProgress.GetValue())
+ 		jCustomSkillsKey = jmap.nextKey(jCustomSkillsList, jCustomSkillsKey, "")
+ 	endIf	
++	if(gtsActive == TRUE)
++		GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
++		GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
++		GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
++		GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
++		GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
++		if GTSSkillLevel != NONE
++			jmap.SetStr(jCustomSkillsForms, "GTSSkillLevel", GTSSkillLevel.GetValue())
++		endIf
++		if GTSSkillProgress != NONE
++			jmap.SetStr(jCustomSkillsForms, "GTSSkillProgress", GTSSkillProgress.GetValue())
++		endIf
++		if GTSSkillRatio != NONE
++			jmap.SetStr(jCustomSkillsForms, "GTSSkillRatio", GTSSkillRatio.GetValue())
++		endIf
++		if GTSSkillLegendary != NONE
++			jmap.SetStr(jCustomSkillsForms, "GTSSkillLegendary", GTSSkillLegendary.GetValue())
++		endIf
++		if GTSSkillPerkPoints != NONE
++			jmap.SetStr(jCustomSkillsForms, "GTSSkillPerkPoints", GTSSkillPerkPoints.GetValue())
++		endIf
++		jmap.SetStr(jCustomSkillsForms, "GTSTotalKills", GTSPlugin.GetTotalKills(target))
++	endIf
+ 	jvalue.writeToFile(jCustomSkillsForms, JContGlobalPath + "/Proteus/Proteus_Character_SkillsCustom_" + presetName + ".json")
+ endFunction
+ 
+@@ -3195,6 +3280,19 @@
+ 				target.RemoveSpell(ZZSpellList.GetAt(k) as Spell)
+ 				k+=1
+ 			endWhile
++		endIf
++		ZZSpellList = NONE
++
++		;remove GTS spells
++		if(gtsActive == true)
++			ZZSpellList = Game.GetFormFromFile(0x801, gtsPatchName) as FormList
++			if ZZSpellList != NONE
++				k = 0
++				while k < ZZSpellList.GetSize()
++					target.RemoveSpell(ZZSpellList.GetAt(k) as Spell)
++					k+=1
++				endWhile
++			endIf
+ 		endIf
+ 		ZZSpellList = NONE
+ 
+@@ -3911,6 +4009,21 @@
+ 			endIf
+ 			i+=1
+ 		endWhile
++	endIf
++	;GTS custom perks
++	if gtsActive == true
++		FormList GTSCustomPerks = Game.GetFormFromFile(0x800, gtsPatchName) As FormList
++		if GTSCustomPerks != NONE
++			i = 0
++			while i < GTSCustomPerks.GetSize()
++				Perk pPerk = GTSCustomPerks.GetAt(i) as Perk
++				if player.HasPerk(pPerk) == TRUE
++					allGamePerks[perkCountTracker] = pPerk
++					perkCountTracker += 1
++				endIf
++				i+=1
++			endWhile
++		endIf
+ 	endIf
+ 	;remove player known perks from player
+ 	if(option == 1)

@@ -462,6 +462,8 @@ endEvent
 
 
 Function Proteus_NewCharacter(int option) ;0 = regular new character process that makes a spawn, 1 = death of previous character
+	;Never rely on a stale gtsActive value from a persistent quest script.
+	Proteus_CheckActiveMods()
 	player.GetActorBase().SetInvulnerable(True)
 	Debug.Notification("New character function started.")
 	if option == 0
@@ -814,6 +816,8 @@ Function Proteus_SaveGame()
 endFunction
 
 function Proteus_PlayerMainMenu()
+	;Refresh compatibility flags for menu-driven actions as well as hotkeys.
+	Proteus_CheckActiveMods()
 
 	String[] stringArray = new String[16]
 	stringArray[0] = " Save Character"
@@ -1222,6 +1226,10 @@ Function Proteus_CheckActiveMods()
 	;Giantess Mod - Size Matters NG
 	targetModIndex = Game.GetModByName("GTS.esp")
 	if TargetModIndex != 255
+		;GTS state handling does not depend on the FormList ESP.
+		gtsActive = true
+
+		;The compatibility ESP is only required for enumerating GTS perks/spells.
 		targetModIndex = Game.GetModByName("Proteus - GTS Custom Perk Patch.esp")
 		if TargetModIndex != 255
 			gtsPatchName = "Proteus - GTS Custom Perk Patch.esp"
@@ -1231,10 +1239,9 @@ Function Proteus_CheckActiveMods()
 				gtsPatchName = "ProteusGTSCustomPerkPatch.esp"
 			endIf
 		endIf
-		if gtsPatchName != ""
-			gtsActive = true
-		else
-			Debug.Notification("Proteus GTS compatibility patch not installed. Please install it!")
+
+		if gtsPatchName == ""
+			Debug.Notification("Proteus GTS perk/spell patch not installed or not enabled.")
 		endIf
 	endIf
 
@@ -1650,6 +1657,8 @@ endFunction
 
 
 function Proteus_CharacterSave(Actor target, String presetNameKnown)
+	;Ensure character-specific compatibility state is current before saving.
+	Proteus_CheckActiveMods()
 	target.GetActorBase().SetInvulnerable(True)
 	String presetName
 	characterSavingName = target.GetActorBase().GetName()
@@ -3313,7 +3322,7 @@ function Proteus_RemoveSpells(Actor target, int option) ;option 0 = switch chara
 		ZZSpellList = NONE
 
 		;remove GTS spells
-		if(gtsActive == true)
+		if(gtsActive == true && gtsPatchName != "")
 			ZZSpellList = Game.GetFormFromFile(0x801, gtsPatchName) as FormList
 			if ZZSpellList != NONE
 				k = 0
@@ -4040,7 +4049,7 @@ function Proteus_RemovePerks_SlowCheckingProcess(Actor target, int option)
 		endWhile
 	endIf
 	;GTS custom perks
-	if gtsActive == true
+	if gtsActive == true && gtsPatchName != ""
 		FormList GTSCustomPerks = Game.GetFormFromFile(0x800, gtsPatchName) As FormList
 		if GTSCustomPerks != NONE
 			i = 0

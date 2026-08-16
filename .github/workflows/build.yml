@@ -34,7 +34,6 @@ jobs:
         with:
           arch: 'x64'
 
-      # Cache vcpkg dependencies
       - name: Cache vcpkg
         uses: actions/cache@v4
         with:
@@ -45,7 +44,6 @@ jobs:
           restore-keys: |
             vcpkg-${{ runner.os }}-
 
-      # Cache CMake build directory
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
@@ -62,30 +60,7 @@ jobs:
         env:
           VCPKG_BINARY_SOURCES: 'clear;files,~/AppData/Local/vcpkg,readwrite'
 
-      # First build attempt
-      - name: Build (First Attempt)
-        id: build_first
-        uses: lukka/run-cmake@v10
-        continue-on-error: true
-        with:
-          configurePreset: config-release
-          buildPreset: build-release
-
-      # Clean and retry if first attempt failed
-      - name: Clean and reconfigure on failure
-        if: steps.build_first.outcome == 'failure'
-        run: |
-          Write-Host "First build attempt failed. Cleaning and reconfiguring..."
-          if (Test-Path "build") {
-            Remove-Item -Recurse -Force "build"
-            Write-Host "Removed build directory"
-          }
-          cmake --preset config-release --fresh
-        shell: pwsh
-
-      # Second build attempt after clean
-      - name: Build (Retry After Clean)
-        if: steps.build_first.outcome == 'failure'
+      - name: Build
         uses: lukka/run-cmake@v10
         with:
           configurePreset: config-release
@@ -96,3 +71,4 @@ jobs:
         with:
           name: distribution-package
           path: distribution/Package-*
+          if-no-files-found: error

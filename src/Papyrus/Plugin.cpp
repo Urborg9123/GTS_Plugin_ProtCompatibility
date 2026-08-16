@@ -28,6 +28,16 @@ using namespace GTS;
 namespace {
 
 	constexpr std::string_view PapyrusClass = "GTSPlugin";
+	constexpr std::string_view ProteusPlugin = "PROTEUS.esp";
+
+	bool IsProteusProfileActor(const Actor* actor) {
+		if (!actor) {
+			return false;
+		}
+		auto* dataHandler = TESDataHandler::GetSingleton();
+		auto* proteusFile = dataHandler ? dataHandler->LookupModByName(ProteusPlugin) : nullptr;
+		return proteusFile && actor->GetFile(0) == proteusFile;
+	}
 
 	int GetTotalKills(StaticFunctionTag*, Actor* actor) {
 		if (!actor) {
@@ -52,7 +62,8 @@ namespace {
 	}
 
 	bool ProteusProfileSave(StaticFunctionTag*, Actor* player, Actor* proteusActor) {
-		if (!player || !proteusActor) {
+		if (!player || !IsProteusProfileActor(proteusActor)) {
+			logger::error("ProteusProfileSave: rejected invalid/non-PROTEUS.esp profile actor");
 			return false;
 		}
 		const auto* name = proteusActor->GetDisplayFullName();
@@ -60,6 +71,10 @@ namespace {
 	}
 
 	bool ProteusProfileLoad(StaticFunctionTag*, Actor* player, Actor* proteusActor) {
+		if (!player || !IsProteusProfileActor(proteusActor)) {
+			logger::error("ProteusProfileLoad: rejected invalid/non-PROTEUS.esp profile actor");
+			return false;
+		}
 		return GTS::ProteusProfile::Load(player, proteusActor);
 	}
 

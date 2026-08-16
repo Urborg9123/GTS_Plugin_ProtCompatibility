@@ -541,30 +541,27 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 	;GTS compatibility: a Proteus "New Character" must start with fresh GTS progression.
 	;The previous character has already been saved above, so it is now safe to clear
 	;the shared player globals / native kill counter before Proteus removes perks/spells.
-	if(gtsActive == TRUE)
-		GlobalVariable GTSSkillLevelReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillProgressReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillRatioReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillLegendaryReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillPerkPointsReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillLevelReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillProgressReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillRatioReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillLegendaryReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillPerkPointsReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
 
-		if GTSSkillLevelReset != NONE
-			GTSSkillLevelReset.SetValue(0.0)
-		endIf
-		if GTSSkillProgressReset != NONE
-			GTSSkillProgressReset.SetValue(0.0)
-		endIf
-		if GTSSkillRatioReset != NONE
-			GTSSkillRatioReset.SetValue(0.0)
-		endIf
-		if GTSSkillLegendaryReset != NONE
-			GTSSkillLegendaryReset.SetValue(0.0)
-		endIf
-		if GTSSkillPerkPointsReset != NONE
-			GTSSkillPerkPointsReset.SetValue(0.0)
-		endIf
-
+	if GTSSkillLevelReset != NONE
+		GTSSkillLevelReset.SetValue(0.0)
 		GTSPlugin.SetTotalKills(player, 0)
+	endIf
+	if GTSSkillProgressReset != NONE
+		GTSSkillProgressReset.SetValue(0.0)
+	endIf
+	if GTSSkillRatioReset != NONE
+		GTSSkillRatioReset.SetValue(0.0)
+	endIf
+	if GTSSkillLegendaryReset != NONE
+		GTSSkillLegendaryReset.SetValue(0.0)
+	endIf
+	if GTSSkillPerkPointsReset != NONE
+		GTSSkillPerkPointsReset.SetValue(0.0)
 	endIf
 
 	;reset vampirism status
@@ -615,6 +612,61 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 	Utility.Wait(0.1)
 	Teleporter(option)
 	Utility.Wait(0.1)
+
+	;GTS v4: second hard reset after RaceMenu / starting-location flow.
+	GlobalVariable GTSSkillLevelFinalReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillProgressFinalReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillRatioFinalReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillLegendaryFinalReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillPerkPointsFinalReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
+
+	if GTSSkillLevelFinalReset != NONE
+		GTSSkillLevelFinalReset.SetValue(0.0)
+		GTSPlugin.SetTotalKills(player, 0)
+	endIf
+	if GTSSkillProgressFinalReset != NONE
+		GTSSkillProgressFinalReset.SetValue(0.0)
+	endIf
+	if GTSSkillRatioFinalReset != NONE
+		GTSSkillRatioFinalReset.SetValue(0.0)
+	endIf
+	if GTSSkillLegendaryFinalReset != NONE
+		GTSSkillLegendaryFinalReset.SetValue(0.0)
+	endIf
+	if GTSSkillPerkPointsFinalReset != NONE
+		GTSSkillPerkPointsFinalReset.SetValue(0.0)
+	endIf
+
+	;Strip only GTS perks/spells again.
+	FormList GTSFinalPerks = Game.GetFormFromFile(0x800, "ProteusGTSCustomPerkPatch.esp") as FormList
+	if GTSFinalPerks == NONE
+		GTSFinalPerks = Game.GetFormFromFile(0x800, "Proteus - GTS Custom Perk Patch.esp") as FormList
+	endIf
+	if GTSFinalPerks != NONE
+		int gtsFinalPerkIndex = 0
+		while gtsFinalPerkIndex < GTSFinalPerks.GetSize()
+			Perk gtsFinalPerk = GTSFinalPerks.GetAt(gtsFinalPerkIndex) as Perk
+			if gtsFinalPerk != NONE && player.HasPerk(gtsFinalPerk)
+				player.RemovePerk(gtsFinalPerk)
+			endIf
+			gtsFinalPerkIndex += 1
+		endWhile
+	endIf
+
+	FormList GTSFinalSpells = Game.GetFormFromFile(0x801, "ProteusGTSCustomPerkPatch.esp") as FormList
+	if GTSFinalSpells == NONE
+		GTSFinalSpells = Game.GetFormFromFile(0x801, "Proteus - GTS Custom Perk Patch.esp") as FormList
+	endIf
+	if GTSFinalSpells != NONE
+		int gtsFinalSpellIndex = 0
+		while gtsFinalSpellIndex < GTSFinalSpells.GetSize()
+			Spell gtsFinalSpell = GTSFinalSpells.GetAt(gtsFinalSpellIndex) as Spell
+			if gtsFinalSpell != NONE
+				player.RemoveSpell(gtsFinalSpell)
+			endIf
+			gtsFinalSpellIndex += 1
+		endWhile
+	endIf
 
 	;save new character into the Proteus system
 	String playerName = player.GetActorBase().GetName()
@@ -2577,44 +2629,32 @@ int Function Proteus_LoadSkillsAttributes(String presetName, Actor target, Int o
 						DragonbornCustomPerksSkillProgress.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSSkillLevel"
-					if(gtsActive == TRUE)
-						GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
-						if GTSSkillLevel != NONE
-							GTSSkillLevel.SetValue(value as Float)
-						endIf
+					GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
+					if GTSSkillLevel != NONE
+						GTSSkillLevel.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSSkillProgress"
-					if(gtsActive == TRUE)
-						GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
-						if GTSSkillProgress != NONE
-							GTSSkillProgress.SetValue(value as Float)
-						endIf
+					GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
+					if GTSSkillProgress != NONE
+						GTSSkillProgress.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSSkillRatio"
-					if(gtsActive == TRUE)
-						GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
-						if GTSSkillRatio != NONE
-							GTSSkillRatio.SetValue(value as Float)
-						endIf
+					GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
+					if GTSSkillRatio != NONE
+						GTSSkillRatio.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSSkillLegendary"
-					if(gtsActive == TRUE)
-						GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
-						if GTSSkillLegendary != NONE
-							GTSSkillLegendary.SetValue(value as Float)
-						endIf
+					GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
+					if GTSSkillLegendary != NONE
+						GTSSkillLegendary.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSSkillPerkPoints"
-					if(gtsActive == TRUE)
-						GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
-						if GTSSkillPerkPoints != NONE
-							GTSSkillPerkPoints.SetValue(value as Float)
-						endIf
+					GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
+					if GTSSkillPerkPoints != NONE
+						GTSSkillPerkPoints.SetValue(value as Float)
 					endIf
 				elseif stat == "GTSTotalKills"
-					if(gtsActive == TRUE)
-						GTSPlugin.SetTotalKills(target, value as Int)
-					endIf
+					GTSPlugin.SetTotalKills(target, value as Int)
 				endIf
 				stat = jmap.nextKey(jCustomSkillsList, stat, "")
 				j += 1
@@ -2775,28 +2815,29 @@ function Proteus_SaveSkillsAttributes(String presetName, Actor target)
 		jmap.SetStr(jCustomSkillsForms, "DragonbornCustomPerksSkillProgress", DragonbornCustomPerksSkillProgress.GetValue())
 		jCustomSkillsKey = jmap.nextKey(jCustomSkillsList, jCustomSkillsKey, "")
 	endIf	
-	if(gtsActive == TRUE)
-		GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
-		GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
-		if GTSSkillLevel != NONE
-			jmap.SetStr(jCustomSkillsForms, "GTSSkillLevel", GTSSkillLevel.GetValue())
-		endIf
-		if GTSSkillProgress != NONE
-			jmap.SetStr(jCustomSkillsForms, "GTSSkillProgress", GTSSkillProgress.GetValue())
-		endIf
-		if GTSSkillRatio != NONE
-			jmap.SetStr(jCustomSkillsForms, "GTSSkillRatio", GTSSkillRatio.GetValue())
-		endIf
-		if GTSSkillLegendary != NONE
-			jmap.SetStr(jCustomSkillsForms, "GTSSkillLegendary", GTSSkillLegendary.GetValue())
-		endIf
-		if GTSSkillPerkPoints != NONE
-			jmap.SetStr(jCustomSkillsForms, "GTSSkillPerkPoints", GTSSkillPerkPoints.GetValue())
-		endIf
+	;GTS v4: resolve GTS directly instead of relying on the cached gtsActive flag.
+	;The version marker is unconditional so the JSON proves that this PEX actually ran.
+	jmap.SetStr(jCustomSkillsForms, "GTSCompatVersion", "4")
+	GlobalVariable GTSSkillLevel = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillProgress = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillRatio = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillLegendary = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
+	GlobalVariable GTSSkillPerkPoints = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
+	if GTSSkillLevel != NONE
+		jmap.SetStr(jCustomSkillsForms, "GTSSkillLevel", GTSSkillLevel.GetValue())
 		jmap.SetStr(jCustomSkillsForms, "GTSTotalKills", GTSPlugin.GetTotalKills(target))
+	endIf
+	if GTSSkillProgress != NONE
+		jmap.SetStr(jCustomSkillsForms, "GTSSkillProgress", GTSSkillProgress.GetValue())
+	endIf
+	if GTSSkillRatio != NONE
+		jmap.SetStr(jCustomSkillsForms, "GTSSkillRatio", GTSSkillRatio.GetValue())
+	endIf
+	if GTSSkillLegendary != NONE
+		jmap.SetStr(jCustomSkillsForms, "GTSSkillLegendary", GTSSkillLegendary.GetValue())
+	endIf
+	if GTSSkillPerkPoints != NONE
+		jmap.SetStr(jCustomSkillsForms, "GTSSkillPerkPoints", GTSSkillPerkPoints.GetValue())
 	endIf
 	jvalue.writeToFile(jCustomSkillsForms, JContGlobalPath + "/Proteus/Proteus_Character_SkillsCustom_" + presetName + ".json")
 endFunction
@@ -3321,16 +3362,17 @@ function Proteus_RemoveSpells(Actor target, int option) ;option 0 = switch chara
 		endIf
 		ZZSpellList = NONE
 
-		;remove GTS spells
-		if(gtsActive == true && gtsPatchName != "")
-			ZZSpellList = Game.GetFormFromFile(0x801, gtsPatchName) as FormList
-			if ZZSpellList != NONE
-				k = 0
-				while k < ZZSpellList.GetSize()
-					target.RemoveSpell(ZZSpellList.GetAt(k) as Spell)
-					k+=1
-				endWhile
-			endIf
+		;remove GTS spells - direct patch lookup
+		ZZSpellList = Game.GetFormFromFile(0x801, "ProteusGTSCustomPerkPatch.esp") as FormList
+		if ZZSpellList == NONE
+			ZZSpellList = Game.GetFormFromFile(0x801, "Proteus - GTS Custom Perk Patch.esp") as FormList
+		endIf
+		if ZZSpellList != NONE
+			k = 0
+			while k < ZZSpellList.GetSize()
+				target.RemoveSpell(ZZSpellList.GetAt(k) as Spell)
+				k+=1
+			endWhile
 		endIf
 		ZZSpellList = NONE
 
@@ -4048,20 +4090,21 @@ function Proteus_RemovePerks_SlowCheckingProcess(Actor target, int option)
 			i+=1
 		endWhile
 	endIf
-	;GTS custom perks
-	if gtsActive == true && gtsPatchName != ""
-		FormList GTSCustomPerks = Game.GetFormFromFile(0x800, gtsPatchName) As FormList
-		if GTSCustomPerks != NONE
-			i = 0
-			while i < GTSCustomPerks.GetSize()
-				Perk pPerk = GTSCustomPerks.GetAt(i) as Perk
-				if player.HasPerk(pPerk) == TRUE
-					allGamePerks[perkCountTracker] = pPerk
-					perkCountTracker += 1
-				endIf
-				i+=1
-			endWhile
-		endIf
+	;GTS custom perks - direct patch lookup
+	FormList GTSCustomPerks = Game.GetFormFromFile(0x800, "ProteusGTSCustomPerkPatch.esp") As FormList
+	if GTSCustomPerks == NONE
+		GTSCustomPerks = Game.GetFormFromFile(0x800, "Proteus - GTS Custom Perk Patch.esp") As FormList
+	endIf
+	if GTSCustomPerks != NONE
+		i = 0
+		while i < GTSCustomPerks.GetSize()
+			Perk pPerk = GTSCustomPerks.GetAt(i) as Perk
+			if player.HasPerk(pPerk) == TRUE
+				allGamePerks[perkCountTracker] = pPerk
+				perkCountTracker += 1
+			endIf
+			i+=1
+		endWhile
 	endIf
 	;remove player known perks from player
 	if(option == 1)
@@ -9136,3 +9179,4 @@ Actor function Proteus_GetSpawnActorUsingQuest(Quest questCheck)
         return NONE
     endIf
 endFunction
+

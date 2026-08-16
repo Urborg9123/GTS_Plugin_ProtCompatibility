@@ -108,7 +108,7 @@ namespace GTS::ProteusProfile {
 			return form ? form->GetLocalFormID() : 0u;
 		}
 
-		std::string ActorName(const RE::Actor* actor) {
+		std::string ActorName(RE::Actor* actor) {
 			if (!actor) {
 				return {};
 			}

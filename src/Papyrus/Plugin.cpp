@@ -1,4 +1,5 @@
 #include "Papyrus/Plugin.hpp"
+#include "Compat/ProteusProfile.hpp"
 #include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
@@ -28,27 +29,43 @@ namespace {
 
 	constexpr std::string_view PapyrusClass = "GTSPlugin";
 
-    int GetTotalKills(StaticFunctionTag*, Actor* actor) {
-        if (!actor) {
-            return 0;
-        }
+	int GetTotalKills(StaticFunctionTag*, Actor* actor) {
+		if (!actor) {
+			return 0;
+		}
 
-        if (auto data = Persistent::GetKillCountData(actor)) {
-            return static_cast<int>(data->iTotalKills);
-        }
+		if (auto data = Persistent::GetKillCountData(actor)) {
+			return static_cast<int>(data->iTotalKills);
+		}
 
-        return 0;
-    }
+		return 0;
+	}
 
-    void SetTotalKills(StaticFunctionTag*, Actor* actor, int count) {
-        if (!actor) {
-            return;
-        }
+	void SetTotalKills(StaticFunctionTag*, Actor* actor, int count) {
+		if (!actor) {
+			return;
+		}
 
-        if (auto data = Persistent::GetKillCountData(actor)) {
-            data->iTotalKills = static_cast<std::uint32_t>(count > 0 ? count : 0);
-        }
-    }
+		if (auto data = Persistent::GetKillCountData(actor)) {
+			data->iTotalKills = static_cast<std::uint32_t>(count > 0 ? count : 0);
+		}
+	}
+
+	bool ProteusProfileSave(StaticFunctionTag*, Actor* player, Actor* proteusActor) {
+		if (!player || !proteusActor) {
+			return false;
+		}
+		const auto* name = proteusActor->GetDisplayFullName();
+		return GTS::ProteusProfile::Save(player, proteusActor, name ? name : "");
+	}
+
+	bool ProteusProfileLoad(StaticFunctionTag*, Actor* player, Actor* proteusActor) {
+		return GTS::ProteusProfile::Load(player, proteusActor);
+	}
+
+	void ProteusProfileResetNewCharacter(StaticFunctionTag*, Actor* player) {
+		GTS::ProteusProfile::ResetNewCharacter(player);
+	}
 
 	void ResetQuestProgression(StaticFunctionTag*) {
 		GTS::ResetQuest();
@@ -85,15 +102,15 @@ namespace {
 		// 8 = Grab
 		if (Pred && Prey) {
 			switch (Type) {
-				case 0: VoreAI_StartVore(Pred, std::vector<Actor*> {Prey}); 			break;
-				case 1: DevourmentAI_Start(Pred, std::vector<Actor*> {Prey});			break;
-				case 2: StompAI_Start(Pred, Prey);										break;
-				case 3: KickSwipeAI_Start(Pred);										break;
-				case 4: ThighSandwichAI_Start(Pred, std::vector<Actor*> {Prey});		break;
-				case 5: ThighCrushAI_Start(Pred);										break;
-				case 6: ButtCrushAI_Start(Pred, Prey);									break;
-				case 7: HugAI_Start(Pred, Prey);										break;
-				case 8: GrabAI_Start(Pred, Prey);										break;
+				case 0: VoreAI_StartVore(Pred, std::vector<Actor*> {Prey}); break;
+				case 1: DevourmentAI_Start(Pred, std::vector<Actor*> {Prey}); break;
+				case 2: StompAI_Start(Pred, Prey); break;
+				case 3: KickSwipeAI_Start(Pred); break;
+				case 4: ThighSandwichAI_Start(Pred, std::vector<Actor*> {Prey}); break;
+				case 5: ThighCrushAI_Start(Pred); break;
+				case 6: ButtCrushAI_Start(Pred, Prey); break;
+				case 7: HugAI_Start(Pred, Prey); break;
+				case 8: GrabAI_Start(Pred, Prey); break;
 			}
 		} else {
 			if (!Pred) {
@@ -117,6 +134,12 @@ namespace GTS {
 
 		vm->RegisterFunction("GetTotalKills", PapyrusClass, GetTotalKills);
 		vm->RegisterFunction("SetTotalKills", PapyrusClass, SetTotalKills);
+
+		// Proteus compatibility: GTS owns the character profile; Proteus only
+		// supplies the stable inactive-character actor at switch boundaries.
+		vm->RegisterFunction("ProteusProfileSave", PapyrusClass, ProteusProfileSave);
+		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
+		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
 
 		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);

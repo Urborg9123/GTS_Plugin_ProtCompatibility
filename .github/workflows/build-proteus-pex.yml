@@ -133,7 +133,7 @@ jobs:
           $flags | Set-Content -Path build\TESV_Papyrus_Flags.flg -Encoding ASCII
           Get-Content build\TESV_Papyrus_Flags.flg
 
-      - name: Compile ProteusRecurringQuestScript
+      - name: Compile compatibility Papyrus scripts
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -151,19 +151,38 @@ jobs:
             "ProteusRecurringQuestScript.psc"
 
           if ($LASTEXITCODE -ne 0) {
-            throw "Caprica failed with exit code $LASTEXITCODE"
+            throw "ProteusRecurringQuestScript Caprica failed with exit code $LASTEXITCODE"
+          }
+
+          Set-Location "$repo\ProteusCompat\Headers"
+
+          & "$repo\tools\Caprica.exe" `
+            --game skyrim `
+            --flags "$repo\build\TESV_Papyrus_Flags.flg" `
+            --import "$repo\build\imports" `
+            --output "$repo\build\out" `
+            "GTSPlugin.psc"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "GTSPlugin Caprica failed with exit code $LASTEXITCODE"
           }
 
           Set-Location $repo
 
-          $pex = Get-ChildItem "$repo\build\out" -Recurse -Filter ProteusRecurringQuestScript.pex |
+          $proteusPex = Get-ChildItem "$repo\build\out" -Recurse -Filter ProteusRecurringQuestScript.pex |
+            Select-Object -First 1
+          $gtsPex = Get-ChildItem "$repo\build\out" -Recurse -Filter GTSPlugin.pex |
             Select-Object -First 1
 
-          if (-not $pex) {
+          if (-not $proteusPex) {
             throw 'ProteusRecurringQuestScript.pex was not produced.'
           }
+          if (-not $gtsPex) {
+            throw 'GTSPlugin.pex was not produced.'
+          }
 
-          Write-Host "Compiled: $($pex.FullName)"
+          Write-Host "Compiled: $($proteusPex.FullName)"
+          Write-Host "Compiled: $($gtsPex.FullName)"
 
       - name: Stage compatibility package
         shell: pwsh
@@ -173,10 +192,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path artifact\Scripts | Out-Null
           New-Item -ItemType Directory -Force -Path artifact\Source\Scripts | Out-Null
 
-          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
+          $proteusPex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
+            Select-Object -First 1
+          $gtsPex = Get-ChildItem build\out -Recurse -Filter GTSPlugin.pex |
             Select-Object -First 1
 
-          Copy-Item $pex.FullName artifact\Scripts\ProteusRecurringQuestScript.pex
+          Copy-Item $proteusPex.FullName artifact\Scripts\ProteusRecurringQuestScript.pex
+          Copy-Item $gtsPex.FullName artifact\Scripts\GTSPlugin.pex
           Copy-Item ProteusCompat\Source\ProteusRecurringQuestScript.psc artifact\Source\Scripts\ProteusRecurringQuestScript.psc
           Copy-Item ProteusCompat\Headers\GTSPlugin.psc artifact\Source\Scripts\GTSPlugin.psc
 

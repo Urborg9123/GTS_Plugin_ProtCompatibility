@@ -9,6 +9,29 @@
 #include <fstream>
 
 namespace GTS::ProteusProfile {
+	// Glaze's reflection machinery requires serialized types to have external
+	// linkage. Keep the profile schema types in this named namespace rather
+	// than the anonymous implementation namespace below.
+	struct SkillGlobals {
+		float level = 0.0f;
+		float progress = 0.0f;
+		float ratio = 0.0f;
+		float legendary = 0.0f;
+		float perkPoints = 0.0f;
+	};
+
+	struct CharacterProfile {
+		std::uint32_t schemaVersion = 1;
+		std::string characterKey;
+		std::string displayName;
+		std::uint32_t proteusLocalFormID = 0;
+		PersistentActorData actorData{};
+		PersistentKillCountData killData{};
+		SkillGlobals skill{};
+		std::vector<std::uint32_t> perkLocalFormIDs;
+		std::vector<std::uint32_t> spellLocalFormIDs;
+	};
+
 	namespace {
 		constexpr std::uint32_t kSchemaVersion = 1;
 		constexpr std::string_view kGTSPlugin = "GTS.esp";
@@ -18,26 +41,6 @@ namespace GTS::ProteusProfile {
 		constexpr RE::FormID kSkillRatio = 0x142202;
 		constexpr RE::FormID kSkillLegendary = 0x142203;
 		constexpr RE::FormID kSkillPerkPoints = 0x2352E1;
-
-		struct SkillGlobals {
-			float level = 0.0f;
-			float progress = 0.0f;
-			float ratio = 0.0f;
-			float legendary = 0.0f;
-			float perkPoints = 0.0f;
-		};
-
-		struct CharacterProfile {
-			std::uint32_t schemaVersion = kSchemaVersion;
-			std::string characterKey;
-			std::string displayName;
-			std::uint32_t proteusLocalFormID = 0;
-			PersistentActorData actorData{};
-			PersistentKillCountData killData{};
-			SkillGlobals skill{};
-			std::vector<std::uint32_t> perkLocalFormIDs;
-			std::vector<std::uint32_t> spellLocalFormIDs;
-		};
 
 		RE::TESDataHandler* GetDataHandler() {
 			return RE::TESDataHandler::GetSingleton();

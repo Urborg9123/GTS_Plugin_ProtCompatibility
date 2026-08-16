@@ -43,7 +43,7 @@ namespace GTS::ProteusProfile {
 			return RE::TESDataHandler::GetSingleton();
 		}
 
-		RE::TESFile* GetGTSFile() {
+		const RE::TESFile* GetGTSFile() {
 			auto* dataHandler = GetDataHandler();
 			return dataHandler ? dataHandler->LookupModByName(kGTSPlugin) : nullptr;
 		}

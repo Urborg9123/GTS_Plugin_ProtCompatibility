@@ -21,7 +21,7 @@ namespace GTS::ProteusProfile {
 	};
 
 	struct CharacterProfile {
-		std::uint32_t schemaVersion = 1;
+		std::uint32_t schemaVersion = 2;
 		std::string characterKey;
 		std::string displayName;
 		std::uint32_t proteusLocalFormID = 0;
@@ -30,14 +30,14 @@ namespace GTS::ProteusProfile {
 		SkillGlobals skill{};
 		std::vector<std::uint32_t> perkLocalFormIDs;
 
-		// Kept only so schema-v1 profiles written by the first test build remain
-		// readable. Spell state is owned by Proteus and is deliberately ignored
-		// by this compatibility layer.
+		// Legacy field retained only so the JSON remains self-describing while
+		// moving from the first test schema. Spell state belongs to Proteus and
+		// is deliberately ignored by this compatibility layer.
 		std::vector<std::uint32_t> spellLocalFormIDs;
 	};
 
 	namespace {
-		constexpr std::uint32_t kSchemaVersion = 1;
+		constexpr std::uint32_t kSchemaVersion = 2;
 		constexpr std::string_view kGTSPlugin = "GTS.esp";
 
 		constexpr RE::FormID kSkillLevel = 0x142200;
@@ -106,6 +106,42 @@ namespace GTS::ProteusProfile {
 
 		std::uint32_t LocalFormID(const RE::TESForm* form) {
 			return form ? form->GetLocalFormID() : 0u;
+		}
+
+		std::string ActorName(const RE::Actor* actor) {
+			if (!actor) {
+				return {};
+			}
+			const auto* name = actor->GetDisplayFullName();
+			return name ? std::string(name) : std::string{};
+		}
+
+		void LogRuntimeState(std::string_view label, RE::Actor* actor) {
+			if (!actor) {
+				logger::info("ProteusProfile: {} actor=<null>", label);
+				return;
+			}
+
+			const auto* actorData = Persistent::GetActorData(actor);
+			const auto* killData = Persistent::GetKillCountData(actor);
+			SkillGlobals skill{};
+			const bool skillAvailable = ReadSkillGlobals(skill);
+
+			logger::info(
+				"ProteusProfile: {} actor={:06X} name='{}' kills={} highestDamage={:.3f} visual={:.4f} target={:.4f} max={:.4f} skill={:.3f} progress={:.3f} ratio={:.3f} legendary={:.3f} perkPoints={:.3f}",
+				label,
+				LocalFormID(actor),
+				ActorName(actor),
+				killData ? killData->iTotalKills : 0u,
+				actorData ? actorData->fHighestDamageDealt : 0.0f,
+				actorData ? actorData->fVisualScale : 0.0f,
+				actorData ? actorData->fTargetScale : 0.0f,
+				actorData ? actorData->fMaxScale : 0.0f,
+				skillAvailable ? skill.level : -1.0f,
+				skillAvailable ? skill.progress : -1.0f,
+				skillAvailable ? skill.ratio : -1.0f,
+				skillAvailable ? skill.legendary : -1.0f,
+				skillAvailable ? skill.perkPoints : -1.0f);
 		}
 
 		bool IsGTSForm(const RE::TESForm* form, const RE::TESFile* gtsFile) {
@@ -258,7 +294,8 @@ namespace GTS::ProteusProfile {
 				return false;
 			}
 			if (profile.schemaVersion != kSchemaVersion) {
-				logger::warn("ProteusProfile: unsupported schema {} in {}", profile.schemaVersion, path.string());
+				logger::warn("ProteusProfile: unsupported schema {} in {} (expected {})",
+					profile.schemaVersion, path.string(), kSchemaVersion);
 				return false;
 			}
 			return true;
@@ -300,9 +337,14 @@ namespace GTS::ProteusProfile {
 			return false;
 		}
 
+		LogRuntimeState("SAVE source", player);
+
 		CharacterProfile profile{};
 		profile.characterKey = CharacterKey(proteusActor);
 		profile.displayName = std::string(displayName);
+		if (profile.displayName.empty()) {
+			profile.displayName = ActorName(proteusActor);
+		}
 		profile.proteusLocalFormID = LocalFormID(proteusActor);
 
 		auto* actorData = Persistent::GetActorData(player);
@@ -317,6 +359,8 @@ namespace GTS::ProteusProfile {
 		profile.killData = *killData;
 
 		const auto path = ProfilePath(proteusActor);
+		logger::info("ProteusProfile: SAVE destination={} name='{}' ref={:06X}",
+			path.string(), profile.displayName, profile.proteusLocalFormID);
 		if (!WriteProfileFile(profile, path)) {
 			return false;
 		}
@@ -341,20 +385,44 @@ namespace GTS::ProteusProfile {
 			return false;
 		}
 
+		LogRuntimeState("LOAD player-before", player);
+
 		CharacterProfile profile{};
 		const auto path = ProfilePath(proteusActor);
 		if (!ReadProfileWithBackup(profile, path)) {
-			logger::info("ProteusProfile: no valid profile exists yet for {}", CharacterKey(proteusActor));
+			logger::info("ProteusProfile: no valid v{} profile exists yet for {} name='{}'",
+				kSchemaVersion, CharacterKey(proteusActor), ActorName(proteusActor));
 			return false;
 		}
 
-		// Refuse a profile under the wrong identity instead of silently applying
-		// it to another character. Display names are metadata only.
+		// The local RefID is the runtime anchor, but Proteus is known to recycle
+		// those slots. The name is therefore a secondary generation/fingerprint
+		// guard, not the primary key. A mismatch is safer to treat as first-use
+		// than to inject another character's GTS progression.
+		const auto liveName = ActorName(proteusActor);
 		if (profile.proteusLocalFormID != LocalFormID(proteusActor) ||
 			profile.characterKey != CharacterKey(proteusActor)) {
 			logger::error("ProteusProfile: identity mismatch while loading {}", path.string());
 			return false;
 		}
+		if (!profile.displayName.empty() && !liveName.empty() && profile.displayName != liveName) {
+			logger::warn(
+				"ProteusProfile: stale/reused Proteus slot {:06X}; stored name='{}', current name='{}'. Refusing old profile.",
+				LocalFormID(proteusActor), profile.displayName, liveName);
+			return false;
+		}
+
+		logger::info(
+			"ProteusProfile: LOAD profile={} storedName='{}' liveName='{}' kills={} highestDamage={:.3f} visual={:.4f} target={:.4f} max={:.4f} skill={:.3f}",
+			path.string(),
+			profile.displayName,
+			liveName,
+			profile.killData.iTotalKills,
+			profile.actorData.fHighestDamageDealt,
+			profile.actorData.fVisualScale,
+			profile.actorData.fTargetScale,
+			profile.actorData.fMaxScale,
+			profile.skill.level);
 
 		auto* actorData = Persistent::GetActorData(player);
 		auto* killData = Persistent::GetKillCountData(player);
@@ -371,6 +439,7 @@ namespace GTS::ProteusProfile {
 		}
 
 		UpdateNpcCache(proteusActor, profile);
+		LogRuntimeState("LOAD player-after", player);
 		logger::info("ProteusProfile: loaded {} ({}) with {} perks and {} total kills",
 			profile.displayName,
 			profile.characterKey,
@@ -381,8 +450,11 @@ namespace GTS::ProteusProfile {
 
 	void ResetNewCharacter(RE::Actor* player) {
 		if (!player) {
+			logger::warn("ProteusProfile: RESET skipped because player was null");
 			return;
 		}
+
+		LogRuntimeState("RESET before", player);
 
 		if (auto* actorData = Persistent::GetActorData(player)) {
 			*actorData = {};
@@ -396,6 +468,8 @@ namespace GTS::ProteusProfile {
 		if (!ClearGTSPerks(player)) {
 			logger::warn("ProteusProfile: could not clear GTS perks for new character");
 		}
+
+		LogRuntimeState("RESET after", player);
 		logger::info("ProteusProfile: reset GTS state for new Proteus character");
 	}
 

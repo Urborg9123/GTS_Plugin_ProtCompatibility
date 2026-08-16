@@ -29,6 +29,10 @@ namespace GTS::ProteusProfile {
 		PersistentKillCountData killData{};
 		SkillGlobals skill{};
 		std::vector<std::uint32_t> perkLocalFormIDs;
+
+		// Kept only so schema-v1 profiles written by the first test build remain
+		// readable. Spell state is owned by Proteus and is deliberately ignored
+		// by this compatibility layer.
 		std::vector<std::uint32_t> spellLocalFormIDs;
 	};
 
@@ -108,7 +112,7 @@ namespace GTS::ProteusProfile {
 			return form && gtsFile && form->GetFile(0) == gtsFile;
 		}
 
-		bool CaptureGTSForms(RE::Actor* actor, CharacterProfile& profile) {
+		bool CaptureGTSPerks(RE::Actor* actor, CharacterProfile& profile) {
 			auto* dataHandler = GetDataHandler();
 			auto* gtsFile = GetGTSFile();
 			if (!actor || !dataHandler || !gtsFile) {
@@ -122,19 +126,11 @@ namespace GTS::ProteusProfile {
 				}
 			}
 
-			profile.spellLocalFormIDs.clear();
-			for (auto* spell : dataHandler->GetFormArray<RE::SpellItem>()) {
-				if (IsGTSForm(spell, gtsFile) && actor->HasSpell(spell)) {
-					profile.spellLocalFormIDs.push_back(LocalFormID(spell));
-				}
-			}
-
 			std::ranges::sort(profile.perkLocalFormIDs);
-			std::ranges::sort(profile.spellLocalFormIDs);
 			return true;
 		}
 
-		bool ClearGTSForms(RE::Actor* actor) {
+		bool ClearGTSPerks(RE::Actor* actor) {
 			auto* dataHandler = GetDataHandler();
 			auto* gtsFile = GetGTSFile();
 			if (!actor || !dataHandler || !gtsFile) {
@@ -146,16 +142,10 @@ namespace GTS::ProteusProfile {
 					actor->RemovePerk(perk);
 				}
 			}
-
-			for (auto* spell : dataHandler->GetFormArray<RE::SpellItem>()) {
-				if (IsGTSForm(spell, gtsFile) && actor->HasSpell(spell)) {
-					actor->RemoveSpell(spell);
-				}
-			}
 			return true;
 		}
 
-		bool ApplyGTSForms(RE::Actor* actor, const CharacterProfile& profile) {
+		bool ApplyGTSPerks(RE::Actor* actor, const CharacterProfile& profile) {
 			auto* dataHandler = GetDataHandler();
 			if (!actor || !dataHandler || !GetGTSFile()) {
 				return false;
@@ -171,25 +161,14 @@ namespace GTS::ProteusProfile {
 					actor->AddPerk(perk);
 				}
 			}
-
-			for (auto localID : profile.spellLocalFormIDs) {
-				auto* spell = dataHandler->LookupForm<RE::SpellItem>(localID, kGTSPlugin);
-				if (!spell) {
-					logger::warn("ProteusProfile: GTS spell {:06X} from profile no longer exists", localID);
-					continue;
-				}
-				if (!actor->HasSpell(spell)) {
-					actor->AddSpell(spell);
-				}
-			}
 			return true;
 		}
 
-		bool ReplaceGTSForms(RE::Actor* actor, const CharacterProfile& profile) {
-			if (!ClearGTSForms(actor)) {
+		bool ReplaceGTSPerks(RE::Actor* actor, const CharacterProfile& profile) {
+			if (!ClearGTSPerks(actor)) {
 				return false;
 			}
-			return ApplyGTSForms(actor, profile);
+			return ApplyGTSPerks(actor, profile);
 		}
 
 		std::string CharacterKey(const RE::Actor* proteusActor) {
@@ -328,7 +307,7 @@ namespace GTS::ProteusProfile {
 
 		auto* actorData = Persistent::GetActorData(player);
 		auto* killData = Persistent::GetKillCountData(player);
-		if (!actorData || !killData || !ReadSkillGlobals(profile.skill) || !CaptureGTSForms(player, profile)) {
+		if (!actorData || !killData || !ReadSkillGlobals(profile.skill) || !CaptureGTSPerks(player, profile)) {
 			logger::warn("ProteusProfile: refusing to overwrite {} because complete GTS state is unavailable",
 				profile.characterKey);
 			return false;
@@ -343,11 +322,10 @@ namespace GTS::ProteusProfile {
 		}
 
 		UpdateNpcCache(proteusActor, profile);
-		logger::info("ProteusProfile: saved {} ({}) with {} perks, {} spells, {} total kills",
+		logger::info("ProteusProfile: saved {} ({}) with {} perks and {} total kills",
 			profile.displayName,
 			profile.characterKey,
 			profile.perkLocalFormIDs.size(),
-			profile.spellLocalFormIDs.size(),
 			profile.killData.iTotalKills);
 		return true;
 	}
@@ -387,17 +365,16 @@ namespace GTS::ProteusProfile {
 
 		*actorData = profile.actorData;
 		*killData = profile.killData;
-		if (!ReplaceGTSForms(player, profile)) {
-			logger::warn("ProteusProfile: failed to replace GTS forms while loading {}", profile.characterKey);
+		if (!ReplaceGTSPerks(player, profile)) {
+			logger::warn("ProteusProfile: failed to replace GTS perks while loading {}", profile.characterKey);
 			return false;
 		}
 
 		UpdateNpcCache(proteusActor, profile);
-		logger::info("ProteusProfile: loaded {} ({}) with {} perks, {} spells, {} total kills",
+		logger::info("ProteusProfile: loaded {} ({}) with {} perks and {} total kills",
 			profile.displayName,
 			profile.characterKey,
 			profile.perkLocalFormIDs.size(),
-			profile.spellLocalFormIDs.size(),
 			profile.killData.iTotalKills);
 		return true;
 	}
@@ -416,8 +393,8 @@ namespace GTS::ProteusProfile {
 		if (!WriteSkillGlobals({})) {
 			logger::warn("ProteusProfile: could not reset GTS skill globals for new character");
 		}
-		if (!ClearGTSForms(player)) {
-			logger::warn("ProteusProfile: could not clear GTS perks/spells for new character");
+		if (!ClearGTSPerks(player)) {
+			logger::warn("ProteusProfile: could not clear GTS perks for new character");
 		}
 		logger::info("ProteusProfile: reset GTS state for new Proteus character");
 	}

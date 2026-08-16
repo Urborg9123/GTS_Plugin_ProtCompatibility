@@ -7,9 +7,15 @@ Function ResetQuestProgression() global native
 Float function Quest_GetProgression(int aiStage) global native
 Bool function WasDragonEaten() global native
 
-; Proteus compatibility
+; Legacy Proteus compatibility helpers
 Int Function GetTotalKills(Actor akActor) global native
 Function SetTotalKills(Actor akActor, Int aiCount) global native
+
+; Native Proteus character profiles. The stable Proteus NPC identifies the
+; character; GTS owns the durable JSON profile and runtime transfer.
+Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global native
+Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
+Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native

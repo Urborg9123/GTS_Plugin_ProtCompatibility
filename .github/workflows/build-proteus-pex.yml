@@ -18,27 +18,38 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Apply native GTS Proteus patch
+      - name: Validate native GTS wrapper hooks
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          $source = Get-Content ProteusCompat\Source\ProteusRecurringQuestScript.psc -Raw
 
-          git apply --check ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch check failed with exit code $LASTEXITCODE"
+          $required = @(
+            'GTSPlugin.ProteusBeginNewCharacter(player)',
+            'GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)',
+            'GTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor)',
+            'GTSPlugin.ProteusProfileLoad(player, target)'
+          )
+
+          foreach ($needle in $required) {
+            if (-not $source.Contains($needle)) {
+              throw "Missing native GTS wrapper hook: $needle"
+            }
           }
 
-          git apply ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch apply failed with exit code $LASTEXITCODE"
+          $forbidden = @(
+            'GTSSkillLevelReset',
+            'GTSSkillLevelFinalReset',
+            'GTSFinalSpells'
+          )
+
+          foreach ($needle in $forbidden) {
+            if ($source.Contains($needle)) {
+              throw "Legacy direct GTS reset survived in Proteus source: $needle"
+            }
           }
 
-          git diff --check
-          if ($LASTEXITCODE -ne 0) {
-            throw "Patched Proteus source failed git diff --check"
-          }
-
-          Write-Host 'Native GTS Proteus patch applied.'
+          Write-Host 'Native GTS wrapper hooks validated.'
 
       - name: Download Caprica
         shell: pwsh

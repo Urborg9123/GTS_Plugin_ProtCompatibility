@@ -18,24 +18,18 @@ namespace GTS {
         static void CMD_Help();
         static void CMD_Version();
         static void CMD_Unlimited();
+        static void CMD_ProfileDump();
+        static void CMD_ProfileSave();
+        static void CMD_ProfileReset();
+        static void CMD_ProfileLoad();
 
         public:
         static void Init();
         static void RegisterCommand(std::string_view a_cmdName, const std::function<void()>& a_callback, const std::string& a_desc);
         static bool Process(const std::string& a_msg);
 
-
-
         // Inherited via EventListener
         std::string DebugName() override;
         void DataReady() override;
     };
-
-
-
-
-
-
-
-
 }

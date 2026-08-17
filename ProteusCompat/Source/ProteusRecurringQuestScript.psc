@@ -464,6 +464,9 @@ endEvent
 Function Proteus_NewCharacter(int option) ;0 = regular new character process that makes a spawn, 1 = death of previous character
 	;Never rely on a stale gtsActive value from a persistent quest script.
 	Proteus_CheckActiveMods()
+	if gtsActive == true
+		GTSPlugin.ProteusBeginNewCharacter(player)
+	endIf
 	player.GetActorBase().SetInvulnerable(True)
 	Debug.Notification("New character function started.")
 	if option == 0
@@ -476,6 +479,12 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 		;spawn a copy of the just saved character
 		Utility.Wait(0.1)
 		Proteus_LoadCharacterSpawn(player, characterSavingName)
+		if gtsActive == true
+			Actor gtsOutgoingActor = Proteus_GetSpawnActor(characterSavingName)
+			if gtsOutgoingActor != NONE
+				GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
+			endIf
+		endIf
 		Utility.Wait(0.1)
 	elseif option == 1
 		String presetName = player.GetActorBase().GetName()
@@ -489,6 +498,12 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 		Proteus_RegisterLoadedPresetOption(player, processedPLAYERPRESETName, presetName, false)
 		SaveAppearancePresetJSON(processedPLAYERPRESETName, presetName)
 		Proteus_SaveGlobalVariables(presetName)
+		if gtsActive == true
+			Actor gtsOutgoingDeathActor = Proteus_GetSpawnActor(presetName)
+			if gtsOutgoingDeathActor != NONE
+				GTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor)
+			endIf
+		endIf
 		Proteus_ResetSpawn(presetName, 0)
 	endIf
 
@@ -538,32 +553,9 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 	ActorValueInfo.GetActorValueInfoByName("twoHanded").SetSkillExperience(0)
 	Game.SetPerkPoints(0)
 
-	;GTS compatibility: a Proteus "New Character" must start with fresh GTS progression.
-	;The previous character has already been saved above, so it is now safe to clear
-	;the shared player globals / native kill counter before Proteus removes perks/spells.
-	GlobalVariable GTSSkillLevelReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillProgressReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillRatioReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillLegendaryReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillPerkPointsReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
 
-	if GTSSkillLevelReset != NONE
-		GTSSkillLevelReset.SetValue(0.0)
-		GTSPlugin.SetTotalKills(player, 0)
-	endIf
-	if GTSSkillProgressReset != NONE
-		GTSSkillProgressReset.SetValue(0.0)
-	endIf
-	if GTSSkillRatioReset != NONE
-		GTSSkillRatioReset.SetValue(0.0)
-	endIf
-	if GTSSkillLegendaryReset != NONE
-		GTSSkillLegendaryReset.SetValue(0.0)
-	endIf
-	if GTSSkillPerkPointsReset != NONE
-		GTSSkillPerkPointsReset.SetValue(0.0)
-	endIf
-
+	;GTS runtime reset is owned by the native wrapper transaction and occurs
+	;only after the pending New Character RaceMenu closes.
 	;reset vampirism status
 	Proteus_Vampirism(3)
 
@@ -613,61 +605,9 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 	Teleporter(option)
 	Utility.Wait(0.1)
 
-	;GTS v4: second hard reset after RaceMenu / starting-location flow.
-	GlobalVariable GTSSkillLevelFinalReset = Game.GetFormFromFile(0x142200, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillProgressFinalReset = Game.GetFormFromFile(0x142201, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillRatioFinalReset = Game.GetFormFromFile(0x142202, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillLegendaryFinalReset = Game.GetFormFromFile(0x142203, "GTS.esp") as GlobalVariable
-	GlobalVariable GTSSkillPerkPointsFinalReset = Game.GetFormFromFile(0x2352E1, "GTS.esp") as GlobalVariable
 
-	if GTSSkillLevelFinalReset != NONE
-		GTSSkillLevelFinalReset.SetValue(0.0)
-		GTSPlugin.SetTotalKills(player, 0)
-	endIf
-	if GTSSkillProgressFinalReset != NONE
-		GTSSkillProgressFinalReset.SetValue(0.0)
-	endIf
-	if GTSSkillRatioFinalReset != NONE
-		GTSSkillRatioFinalReset.SetValue(0.0)
-	endIf
-	if GTSSkillLegendaryFinalReset != NONE
-		GTSSkillLegendaryFinalReset.SetValue(0.0)
-	endIf
-	if GTSSkillPerkPointsFinalReset != NONE
-		GTSSkillPerkPointsFinalReset.SetValue(0.0)
-	endIf
-
-	;Strip only GTS perks/spells again.
-	FormList GTSFinalPerks = Game.GetFormFromFile(0x800, "ProteusGTSCustomPerkPatch.esp") as FormList
-	if GTSFinalPerks == NONE
-		GTSFinalPerks = Game.GetFormFromFile(0x800, "Proteus - GTS Custom Perk Patch.esp") as FormList
-	endIf
-	if GTSFinalPerks != NONE
-		int gtsFinalPerkIndex = 0
-		while gtsFinalPerkIndex < GTSFinalPerks.GetSize()
-			Perk gtsFinalPerk = GTSFinalPerks.GetAt(gtsFinalPerkIndex) as Perk
-			if gtsFinalPerk != NONE && player.HasPerk(gtsFinalPerk)
-				player.RemovePerk(gtsFinalPerk)
-			endIf
-			gtsFinalPerkIndex += 1
-		endWhile
-	endIf
-
-	FormList GTSFinalSpells = Game.GetFormFromFile(0x801, "ProteusGTSCustomPerkPatch.esp") as FormList
-	if GTSFinalSpells == NONE
-		GTSFinalSpells = Game.GetFormFromFile(0x801, "Proteus - GTS Custom Perk Patch.esp") as FormList
-	endIf
-	if GTSFinalSpells != NONE
-		int gtsFinalSpellIndex = 0
-		while gtsFinalSpellIndex < GTSFinalSpells.GetSize()
-			Spell gtsFinalSpell = GTSFinalSpells.GetAt(gtsFinalSpellIndex) as Spell
-			if gtsFinalSpell != NONE
-				player.RemoveSpell(gtsFinalSpell)
-			endIf
-			gtsFinalSpellIndex += 1
-		endWhile
-	endIf
-
+	;Native ProteusSync owns the clean GTS working copy; Proteus continues
+	;with its normal character save below.
 	;save new character into the Proteus system
 	String playerName = player.GetActorBase().GetName()
 	Proteus_CharacterSave(player, playerName)
@@ -5528,6 +5468,12 @@ Function Proteus_SwitchCharacter()
 		if (targetNameLength > 0)	
 			;save current character 
 			String playerName = player.GetActorBase().GetName()
+			if gtsActive == true
+				Actor gtsOutgoingActor = Proteus_GetSpawnActor(playerName)
+				if gtsOutgoingActor != NONE
+					GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
+				endIf
+			endIf
 			Proteus_CharacterSave(player, playerName)
 			Utility.Wait(0.1)
 
@@ -5589,7 +5535,12 @@ Function Proteus_SwitchCharacter()
 					playerMarker.MoveTo(player)
 					player.MoveTo(playerMarker)
 					Proteus_ReloadSIGEChanges() ;make sure any character specific armor, weapon, spell changes reload for the new character, added in 1.9.0
-					Debug.Notification("Character switch complete.")
+					if gtsActive == true
+					;Canonical GTS JSON is authoritative. If no native profile exists yet,
+					;Load returns false and Proteus's legacy GTS fields remain as a migration fallback.
+					GTSPlugin.ProteusProfileLoad(player, target)
+				endIf
+				Debug.Notification("Character switch complete.")
 				elseif playerPresetName == targetPresetName
 					Debug.Notification("ERROR: Player and target preset name match.")
 				endIf

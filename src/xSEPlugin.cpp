@@ -5,6 +5,7 @@
 #include "Hooks/Engine/Main.hpp"
 #include "Utils/Plugin/InitUtils.hpp"
 #include "Utils/Plugin/Logger.hpp"
+#include "Compat/ProteusRaceMenuMonitor.hpp"
 
 namespace {
 
@@ -96,6 +97,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* a_skse){
 	InitializePapyrus();
 	Hooks::Install();
 	GTS::RegisterEventListeners();
+	GTS::ProteusRaceMenuMonitor::Register();
 
 	#endif
 

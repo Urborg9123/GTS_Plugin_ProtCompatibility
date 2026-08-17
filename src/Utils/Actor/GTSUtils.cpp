@@ -170,7 +170,7 @@ namespace GTS {
 				speedmultcalc = std::clamp(speedmultcalc, Adv.fAnimspeedLowestBoundAllowed, 1.0f);
 
 				if (AnimationVars::General::IsGTSBusy(giant) && Adv.bGTSAnimsFullSpeed) {
-					return 1.0f; // Don't slowdown GTS anims if enabled in Config
+					return 1.0f;
 				}
 				if (giant->IsPlayerRef()) {
 					return Adv.fAnimSpeedAdjMultPlayer * speedmultcalc;
@@ -677,7 +677,7 @@ namespace GTS {
 			CollisionDamage::DoFootCollision(giant, damage, radius, random, bonedamage, crushmult, Cause, false, false, ignore_rotation, true);
 		}
 		if (kind == FootEvent::Right) {
-			CollisionDamage::DoFootCollision(giant, damage, radius, random, bonedamage, kind, true, false, ignore_rotation, true);
+			CollisionDamage::DoFootCollision(giant, damage, radius, random, bonedamage, crushmult, Cause, true, false, ignore_rotation, true);
 		}
 	}
 
@@ -828,13 +828,13 @@ namespace GTS {
 
 				SpawnCustomParticle(actor, ParticleType::Red, NiPoint3(), "NPC Root [Root]", scale * 1.15f);
 				Runtime::PlaySoundAtNode(Runtime::SNDR.GTSSoundMagicProctectTinies, actor, 1.0f, "NPC COM [COM ]");
-				
+
 				std::string name_com = std::format("Protect_{}", actor->formID);
 				std::string name_root = std::format("Protect_Root_{}", actor->formID);
 
 				Rumbling::Once(name_com, actor, 4.0f, 0.20f, "NPC COM [COM ]", 0.0f);
 				Rumbling::Once(name_root, actor, 4.0f, 0.20f, "NPC Root [Root]", 0.0f);
-
+				
 				LaunchImmunityTask(actor, Balance);
 			}
 		}

@@ -94,6 +94,7 @@ namespace GTS {
 			else {
 				Cprint("You need to obtain Colossal Growth perk to use this command");
 			}
+		}
 	}
 
 	void ConsoleManager::CMD_ProfileDump() {

@@ -32,6 +32,38 @@ namespace {
 		return 1.0f;
 	}
 
+	float GetStoredAttributeBonus(Actor* actor, ActorValue av) {
+		if (!actor) {
+			return 0.0f;
+		}
+
+		// Preserve the existing player path exactly. Full Assimilation storage is
+		// still earned/distributed only by player-only code in GTSUtils.
+		if (actor->IsPlayerRef()) {
+			return GetStolenAttributes_Values(actor, av);
+		}
+
+		// NPC profiles can carry already-earned Full Assimilation values copied
+		// from a player profile. Read those persisted values directly so the
+		// attribute hook can consume them without enabling NPCs to earn more.
+		auto* persistent = Persistent::GetActorData(actor);
+		if (!persistent) {
+			return 0.0f;
+		}
+
+		const float cap = GetStolenAttributeCap(actor);
+		switch (av) {
+			case ActorValue::kHealth:
+				return std::min(persistent->fStolenHealth, cap);
+			case ActorValue::kMagicka:
+				return std::min(persistent->fStolenMagicka, cap);
+			case ActorValue::kStamina:
+				return std::min(persistent->fStolenStamina, cap);
+			default:
+				return 0.0f;
+		}
+	}
+
 	void ManagePerkBonuses(Actor* actor) {
 
 		auto& SizeManager = SizeManager::GetSingleton();
@@ -198,7 +230,7 @@ namespace GTS {
 					scale += 2.0f;
 				}
 				const float BonusDamageMult = Config::Balance.fStatBonusDamageMult;
-				const float DamageStorage = 1.0f + ((BonusDamageMult) * (scale - 1.0f));
+				float DamageStorage = 1.0f + ((BonusDamageMult) * (scale - 1.0f));
 
 				float might = 1.0f + Potion_GetMightBonus(actor);
 
@@ -248,7 +280,7 @@ namespace GTS {
 
 			case ActorValue::kHealth: { // 27.03.2024: Health boost is still applied, but for Player only and only if having matching perks
 
-				float perkbonus = GetStolenAttributes_Values(actor, ActorValue::kHealth); // calc health from the perk bonuses
+				float perkbonus = GetStoredAttributeBonus(actor, ActorValue::kHealth); // calc health from the perk bonuses
 				float finalValue = originalValue + perkbonus; // add flat health on top
 				auto transient = Transient::GetActorData(actor);
 				if (transient) {
@@ -257,11 +289,11 @@ namespace GTS {
 				return finalValue;
 			}
 			case ActorValue::kMagicka: {
-				float perkbonus = GetStolenAttributes_Values(actor, ActorValue::kMagicka);
+				float perkbonus = GetStoredAttributeBonus(actor, ActorValue::kMagicka);
 				return originalValue + perkbonus;
 			}
 			case ActorValue::kStamina: {
-				float perkbonus = GetStolenAttributes_Values(actor, ActorValue::kStamina);
+				float perkbonus = GetStoredAttributeBonus(actor, ActorValue::kStamina);
 				return originalValue + perkbonus;
 			}
 
@@ -282,7 +314,6 @@ namespace GTS {
 						originalValue -= lastEdit;
 						return originalValue;
 					}
-				}
 			}
 
 			default: return originalValue;

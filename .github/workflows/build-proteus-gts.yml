@@ -2,6 +2,9 @@ name: Build Proteus GTS
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/npc-stolen-attribute-counters
 
 permissions:
   contents: read
@@ -19,6 +22,13 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Apply NPC stolen attribute counter patch
+        shell: pwsh
+        run: |
+          git apply patches/npc-stolen-attribute-counters.patch
+          git diff --check
+          git diff -- src/Utils/Actor/GTSUtils.cpp
 
       - name: Show build environment
         shell: pwsh

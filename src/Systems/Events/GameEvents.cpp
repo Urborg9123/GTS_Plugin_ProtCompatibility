@@ -74,20 +74,46 @@ namespace GTS {
 
 	BSEventNotifyControl GameEvents::ProcessEvent(const MenuOpenCloseEvent* a_event, BSTEventSource<MenuOpenCloseEvent>* a_eventSource) {
 
-    if (a_event) {
+		if (a_event) {
 
-        if (a_event->menuName == RE::MainMenu::MENU_NAME) {
-            //Set the state flag opposite to the open/close bool for the main menu.
-            //Fixes cases where the mod doesn't initialize if you directly load into a cell from the main menu.
-            //Passing the inverted state also acts as a "Reset" so that if you go back to the main menu the ingame state is set to false again.
-            State::SetInGame(!a_event->opening);
-        }
+			if (a_event->menuName == RE::MainMenu::MENU_NAME) {
+				//Set the state flag opposite to the open/close bool for the main menu.
+				//Fixes cases where the mod doesn't initialize if you directly load into a cell from the main menu.
+				//Passing the inverted state also acts as a "Reset" so that if you go back to the main menu the ingame state is set to false again.
+				State::SetInGame(!a_event->opening);
+			}
 
-        EventDispatcher::DoMenuChange(a_event);
-    }
+			// Proteus compatibility diagnostic. RaceMenu itself is our candidate
+			// synchronization barrier for the New Character flow. This test is
+			// deliberately read-only: it logs the menu boundary and the player
+			// identity after the close event, but does not modify any GTS state.
+			if (a_event->menuName == RE::RaceSexMenu::MENU_NAME) {
+				if (a_event->opening) {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					const char* name = player ? player->GetDisplayFullName() : nullptr;
+					logger::info("ProteusRaceMenuDiag: OPEN playerName='{}'", name ? name : "<null>");
+				} else {
+					auto* player = RE::PlayerCharacter::GetSingleton();
+					const char* name = player ? player->GetDisplayFullName() : nullptr;
+					logger::info("ProteusRaceMenuDiag: CLOSE playerName-at-event='{}'", name ? name : "<null>");
 
-    return RE::BSEventNotifyControl::kContinue;
-}
+					if (auto* tasks = SKSE::GetTaskInterface()) {
+						tasks->AddTask([]() {
+							auto* queuedPlayer = RE::PlayerCharacter::GetSingleton();
+							const char* queuedName = queuedPlayer ? queuedPlayer->GetDisplayFullName() : nullptr;
+							logger::info("ProteusRaceMenuDiag: POST-CLOSE playerName='{}'", queuedName ? queuedName : "<null>");
+						});
+					} else {
+						logger::warn("ProteusRaceMenuDiag: SKSE task interface unavailable after RaceMenu close");
+					}
+				}
+			}
+
+			EventDispatcher::DoMenuChange(a_event);
+		}
+
+		return RE::BSEventNotifyControl::kContinue;
+	}
 
 	BSEventNotifyControl GameEvents::ProcessEvent(const TESFurnitureEvent* a_event, BSTEventSource<TESFurnitureEvent>* a_eventSource) {
 		if (a_event) EventDispatcher::DoFurnitureEvent(a_event);

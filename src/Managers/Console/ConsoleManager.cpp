@@ -49,8 +49,13 @@ namespace GTS {
 		}
 	}
 
-	void ConsoleManager::RegisterCommand(std::string_view a_cmdName, const std::function<void(const CommandArgs&)>& a_callback, const std::string& a_desc) {
+	void ConsoleManager::RegisterCommand(std::string_view a_cmdName, const std::function<void()>& a_callback, const std::string& a_desc) {
+		std::string name(a_cmdName);
+		RegisteredCommands.try_emplace(name, a_callback, a_desc);
+		logger::info("Registered Console Command \"{} {}\"", Default_Preffix, name);
+	}
 
+	void ConsoleManager::RegisterCommand(std::string_view a_cmdName, const std::function<void(const CommandArgs&)>& a_callback, const std::string& a_desc) {
 		std::string name(a_cmdName);
 		RegisteredCommands.try_emplace(name, a_callback, a_desc);
 		logger::info("Registered Console Command \"{} {}\"", Default_Preffix, name);
@@ -75,7 +80,7 @@ namespace GTS {
 
 		//if 1 arg show help
 		if (Args.size() < 2) {
-			CMD_Help(CommandArgs{});
+			CMD_Help();
 			return true;
 		}
 
@@ -87,14 +92,17 @@ namespace GTS {
 
 		for (const auto& registered_command : RegisteredCommands) {
 			if (registered_command.first == commandName) {
-				if (registered_command.second.callback) {
-					registered_command.second.callback(commandArgs);
+				if (registered_command.second.callbackArgs) {
+					registered_command.second.callbackArgs(commandArgs);
 					return true;
 				}
-				else {
-					logger::warn("Command {} has no function assigned to it", registered_command.first);
-					return false;
+				if (registered_command.second.callback) {
+					registered_command.second.callback();
+					return true;
 				}
+
+				logger::warn("Command {} has no function assigned to it", registered_command.first);
+				return false;
 			}
 		}
 
@@ -110,7 +118,7 @@ namespace GTS {
 		Init();
 	}
 
-	void ConsoleManager::CMD_Help(const CommandArgs&) {
+	void ConsoleManager::CMD_Help() {
 		Cprint("--- List of available commands ---");
 
 		for (const auto& key : RegisteredCommands) {
@@ -118,14 +126,14 @@ namespace GTS {
 		}
 	}
 
-	void ConsoleManager::CMD_Version(const CommandArgs&) {
+	void ConsoleManager::CMD_Version() {
 		Cprint("--- Giantess Mod: Size Matters ---");
 		Cprint("Version: {}", GTSPlugin::ModVersion.string());
 		Cprint("Dll Build Date: {} {}", __DATE__, __TIME__);
 		Cprint("Git Commit Date: {}", git_CommitDate());
 	}
 
-	void ConsoleManager::CMD_Unlimited(const CommandArgs&) {
+	void ConsoleManager::CMD_Unlimited() {
 		auto Player = PlayerCharacter::GetSingleton();
 		if (Player) {
 			if (Runtime::HasPerk(Player, Runtime::PERK.GTSPerkColossalGrowth)) {
@@ -140,7 +148,7 @@ namespace GTS {
 
 	void ConsoleManager::CMD_ProfileDump(const CommandArgs& args) {
 		std::string label;
-		if (!ResolveProfileKey(args, "pdump", label)) {
+		if (!ResolveProfileKey(args, "pdump/padump", label)) {
 			return;
 		}
 		auto* actor = ResolveProfileActor();
@@ -152,7 +160,7 @@ namespace GTS {
 
 	void ConsoleManager::CMD_ProfileSave(const CommandArgs& args) {
 		std::string key;
-		if (!ResolveProfileKey(args, "psave", key)) {
+		if (!ResolveProfileKey(args, "psave/pasave", key)) {
 			return;
 		}
 		auto* actor = ResolveProfileActor();
@@ -165,7 +173,7 @@ namespace GTS {
 	}
 
 	void ConsoleManager::CMD_ProfileReset(const CommandArgs& args) {
-		if (!RequireNoArgs(args, "preset")) {
+		if (!RequireNoArgs(args, "preset/pareset")) {
 			return;
 		}
 		auto* actor = ResolveProfileActor();
@@ -180,7 +188,7 @@ namespace GTS {
 
 	void ConsoleManager::CMD_ProfileLoad(const CommandArgs& args) {
 		std::string key;
-		if (!ResolveProfileKey(args, "pload", key)) {
+		if (!ResolveProfileKey(args, "pload/paload", key)) {
 			return;
 		}
 		auto* actor = ResolveProfileActor();

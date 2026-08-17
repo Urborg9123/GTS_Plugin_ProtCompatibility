@@ -102,7 +102,7 @@ namespace Hooks {
 				GTS_PROFILE_ENTRYPOINT_UNIQUE("ActorValueOwner::GetBaseActorValue", ID);
 
 				const auto actor = skyrim_cast<Actor*>(a_owner);
-				if (actor && actor->IsPlayerRef()) { // Player Exclusive
+				if (actor) {
 					value = AttributeManager::AlterGetBaseAv(actor, a_akValue, value);
 				}
 

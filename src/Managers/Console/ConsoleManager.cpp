@@ -1,4 +1,5 @@
 #include "Managers/Console/ConsoleManager.hpp"
+#include "Compat/GTSCharacterProfile.hpp"
 #include "Version.hpp"
 #include "git.h"
 
@@ -93,7 +94,34 @@ namespace GTS {
 			else {
 				Cprint("You need to obtain Colossal Growth perk to use this command");
 			}
-		}
+	}
+
+	void ConsoleManager::CMD_ProfileDump() {
+		auto* player = PlayerCharacter::GetSingleton();
+		CharacterProfile::Dump(player, "manual-test");
+	}
+
+	void ConsoleManager::CMD_ProfileSave() {
+		auto* player = PlayerCharacter::GetSingleton();
+		CharacterProfile::Dump(player, "before-save");
+		const bool ok = CharacterProfile::Save(player, "manual-test");
+		Cprint("GTS profile SAVE: {}", ok ? "SUCCESS" : "FAILED");
+	}
+
+	void ConsoleManager::CMD_ProfileReset() {
+		auto* player = PlayerCharacter::GetSingleton();
+		CharacterProfile::Dump(player, "before-reset");
+		const bool ok = CharacterProfile::Reset(player);
+		Cprint("GTS profile RESET: {}", ok ? "SUCCESS" : "FAILED");
+		CharacterProfile::Dump(player, "after-reset");
+	}
+
+	void ConsoleManager::CMD_ProfileLoad() {
+		auto* player = PlayerCharacter::GetSingleton();
+		CharacterProfile::Dump(player, "before-load");
+		const bool ok = CharacterProfile::Load(player, "manual-test");
+		Cprint("GTS profile LOAD: {}", ok ? "SUCCESS" : "FAILED");
+		CharacterProfile::Dump(player, "after-load");
 	}
 
 	void ConsoleManager::Init() {
@@ -101,6 +129,10 @@ namespace GTS {
 		RegisterCommand("help", CMD_Help, "Show this list");
 		RegisterCommand("version", CMD_Version, "Show plugin version");
 		RegisterCommand("unlimited", CMD_Unlimited, "Unlocks max size sliders");
+		RegisterCommand("pdump", CMD_ProfileDump, "Dump current GTS profile state");
+		RegisterCommand("psave", CMD_ProfileSave, "Save current GTS state to manual-test JSON");
+		RegisterCommand("preset", CMD_ProfileReset, "Reset current GTS progression state");
+		RegisterCommand("pload", CMD_ProfileLoad, "Load manual-test JSON into current GTS state");
 	}
 }
 

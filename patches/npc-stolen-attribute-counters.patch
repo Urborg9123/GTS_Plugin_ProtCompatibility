@@ -1,0 +1,37 @@
+diff --git a/src/Utils/Actor/GTSUtils.cpp b/src/Utils/Actor/GTSUtils.cpp
+--- a/src/Utils/Actor/GTSUtils.cpp
++++ b/src/Utils/Actor/GTSUtils.cpp
+@@
+ 	float GetStolenAttributes_Values(Actor* giant, ActorValue type) {
+-		if (giant->IsPlayerRef()) {
+-			auto Persistent = Persistent::GetActorData(giant);
+-			if (Persistent) {
+-				float max = GetStolenAttributeCap(giant);
+-				if (type == ActorValue::kHealth) {
+-					return std::min(Persistent->fStolenHealth, max);
+-				} else if (type == ActorValue::kMagicka) {
+-					return std::min(Persistent->fStolenMagicka, max);
+-				} else if (type == ActorValue::kStamina) {
+-					return std::min(Persistent->fStolenStamina, max);
+-				} else {
+-					return 0.0f;
+-				}
+-			}
+-			return 0.0f;
++		if (!giant) {
++			return 0.0f;
++		}
++
++		auto Persistent = Persistent::GetActorData(giant);
++		if (Persistent) {
++			float max = GetStolenAttributeCap(giant);
++			if (type == ActorValue::kHealth) {
++				return std::min(Persistent->fStolenHealth, max);
++			} else if (type == ActorValue::kMagicka) {
++				return std::min(Persistent->fStolenMagicka, max);
++			} else if (type == ActorValue::kStamina) {
++				return std::min(Persistent->fStolenStamina, max);
++			}
+ 		}
+ 		return 0.0f;
+ 	}

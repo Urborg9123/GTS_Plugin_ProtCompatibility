@@ -29,6 +29,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Apply NPC stolen attribute counter patch
+        shell: pwsh
+        run: |
+          git apply patches/npc-stolen-attribute-counters.patch
+          git diff --check
+          git diff -- src/Utils/Actor/GTSUtils.cpp
+
       - name: Setup MSVC Environment
         uses: ilammy/msvc-dev-cmd@v1
         with:

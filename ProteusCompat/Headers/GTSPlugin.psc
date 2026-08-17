@@ -17,8 +17,12 @@ Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global na
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
+; Wrapper transaction entry. Proteus calls this before it begins rebuilding
+; Player for New Character; RaceMenu close is only the completion barrier.
+Function ProteusBeginNewCharacter(Actor akPlayer) global native
+
 ; Devourment Compatibility
-Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native
+Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) Global Native
 
 ; Force-Start (emphasis on START) size interactions between two actors, further AI actions will rely on your AI settings.
 ; int Type explanation:
@@ -31,4 +35,4 @@ Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) 
 ; 6 = Butt Crush
 ; 7 = Hugs
 ; 8 = Grab
-Function ForceStartSizeInteraction(Actor Pred, Actor Prey, int Type) global native
+Function ForceStartSizeInteraction(Actor Pred, Actor Prey, int Type) Global Native

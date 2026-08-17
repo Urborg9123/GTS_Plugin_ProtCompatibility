@@ -1,4 +1,5 @@
 #include "Systems/Events/GameEvents.hpp"
+#include "Compat/ProteusSync.hpp"
 
 namespace GTS {
 
@@ -74,24 +75,24 @@ namespace GTS {
 
 	BSEventNotifyControl GameEvents::ProcessEvent(const MenuOpenCloseEvent* a_event, BSTEventSource<MenuOpenCloseEvent>* a_eventSource) {
 
-    if (a_event) {
+		if (a_event) {
 
-        if (a_event->menuName == RE::MainMenu::MENU_NAME) {
-            //Set the state flag opposite to the open/close bool for the main menu.
-            //Fixes cases where the mod doesn't initialize if you directly load into a cell from the main menu.
-            //Passing the inverted state also acts as a "Reset" so that if you go back to the main menu the ingame state is set to false again.
-            State::SetInGame(!a_event->opening);
-        }
+			if (a_event->menuName == RE::MainMenu::MENU_NAME) {
+				// Set the state flag opposite to the open/close bool for the main menu.
+				// Fixes cases where the mod doesn't initialize if you directly load into a cell from the main menu.
+				// Passing the inverted state also acts as a "Reset" so that if you go back to the main menu the ingame state is set to false again.
+				State::SetInGame(!a_event->opening);
+				if (a_event->opening) {
+					ProteusSync::Reset();
+				}
+			}
 
-        if (a_event->menuName == RE::RaceSexMenu::MENU_NAME) {
-            logger::info("ProteusSync: RaceMenu {}", a_event->opening ? "OPEN" : "CLOSE");
-        }
+			ProteusSync::HandleMenuOpenClose(a_event);
+			EventDispatcher::DoMenuChange(a_event);
+		}
 
-        EventDispatcher::DoMenuChange(a_event);
-    }
-
-    return RE::BSEventNotifyControl::kContinue;
-}
+		return RE::BSEventNotifyControl::kContinue;
+	}
 
 	BSEventNotifyControl GameEvents::ProcessEvent(const TESFurnitureEvent* a_event, BSTEventSource<TESFurnitureEvent>* a_eventSource) {
 		if (a_event) EventDispatcher::DoFurnitureEvent(a_event);

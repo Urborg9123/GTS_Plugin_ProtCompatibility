@@ -83,6 +83,10 @@ namespace GTS {
             State::SetInGame(!a_event->opening);
         }
 
+        if (a_event->menuName == RE::RaceSexMenu::MENU_NAME) {
+            logger::info("ProteusSync: RaceMenu {}", a_event->opening ? "OPEN" : "CLOSE");
+        }
+
         EventDispatcher::DoMenuChange(a_event);
     }
 

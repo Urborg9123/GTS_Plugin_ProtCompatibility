@@ -1,0 +1,154 @@
+name: Refine Proteus Wrapper Boundaries
+
+on:
+  push:
+    branches:
+      - diagnostics/racemenu-proteus-sync
+    paths:
+      - .github/workflows/refine-proteus-wrapper.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refine transaction boundaries
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("ProteusCompat/Source/ProteusRecurringQuestScript.psc")
+          text = path.read_text(encoding="utf-8-sig")
+
+          def block(source, signature):
+              start = source.index(signature)
+              end = source.index("endFunction", start) + len("endFunction")
+              return start, end, source[start:end]
+
+          # New Character: snapshot first, arm native completion state only after
+          # the outgoing canonical profile has been safely written.
+          start, end, fn = block(text, "Function Proteus_NewCharacter(int option)")
+          fn = fn.replace(
+              "\tProteus_CheckActiveMods()\n\tif gtsActive == true\n\t\tGTSPlugin.ProteusBeginNewCharacter(player)\n\tendIf\n",
+              "\tProteus_CheckActiveMods()\n",
+              1,
+          )
+
+          old = """\t\tProteus_LoadCharacterSpawn(player, characterSavingName)
+\t\tif gtsActive == true
+\t\t\tActor gtsOutgoingActor = Proteus_GetSpawnActor(characterSavingName)
+\t\t\tif gtsOutgoingActor != NONE
+\t\t\t\tGTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
+\t\t\tendIf
+\t\tendIf
+"""
+          new = """\t\tProteus_LoadCharacterSpawn(player, characterSavingName)
+\t\tif gtsActive == true
+\t\t\tActor gtsOutgoingActor = Proteus_GetSpawningActor(characterSavingName)
+\t\t\tif gtsOutgoingActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor) == false
+\t\t\t\tDebug.Notification("GTS profile save failed. New character creation aborted to protect GTS data.")
+\t\t\t\tplayer.GetActorBase().SetInvulnerable(False)
+\t\t\t\treturn
+\t\t\tendIf
+\t\tendIf
+"""
+          if old not in fn:
+              raise RuntimeError("Option-0 outgoing block not found")
+          fn = fn.replace(old, new, 1)
+
+          old = """\t\tif gtsActive == true
+\t\t\tActor gtsOutgoingDeathActor = Proteus_GetSpawnActor(presetName)
+\t\t\tif gtsOutgoingDeathActor != NONE
+\t\t\t\tGTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor)
+\t\t\tendIf
+\t\tendIf
+\t\tProteus_ResetSpawn(presetName, 0)
+\tendIf
+
+\t;reset skills, attributes, experience, perk points available
+"""
+          new = """\t\tif gtsActive == true
+\t\t\tActor gtsOutgoingDeathActor = Proteus_GetSpawningActor(presetName)
+\t\t\tif gtsOutgoingDeathActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor) == false
+\t\t\t\tDebug.Notification("GTS profile save failed. New character creation aborted to protect GTS data.")
+\t\t\t\tplayer.GetActorBase().SetInvulnerable(False)
+\t\t\t\treturn
+\t\t\tendIf
+\t\tendIf
+\t\tProteus_ResetSpawn(presetName, 0)
+\tendIf
+
+\tif gtsActive == true
+\t\tGTSPlugin.ProteusBeginNewCharacter(player)
+\tendIf
+
+\t;reset skills, attributes, experience, perk points available
+"""
+          if old not in fn:
+              raise RuntimeError("Option-1 outgoing block / common boundary not found")
+          fn = fn.replace(old, new, 1)
+          text = text[:start] + fn + text[end:]
+
+          # Existing switch: wait until Proteus has produced the outgoing stable
+          # NPC, then persist Player while Player still contains outgoing state.
+          start, end, fn = block(text, "Function Proteus_SwitchCharacter()")
+          old = """\t\t\tString playerName = player.GetActorBase().GetName()
+\t\t\tif gtsActive == true
+\t\t\t\tActor gtsOutgoingActor = Proteus_GetSpawnActor(playerName)
+\t\t\t\tif gtsOutgoingActor != NONE
+\t\t\t\t\tGTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
+\t\t\t\tendIf
+\t\t\tendIf
+\t\t\tProteus_CharacterSave(player, playerName)
+"""
+          new = """\t\t\tString playerName = player.GetActorBase().GetName()
+\t\t\tProteus_CharacterSave(player, playerName)
+"""
+          if old not in fn:
+              raise RuntimeError("Premature switch save block not found")
+          fn = fn.replace(old, new, 1)
+
+          marker = """\t\t\t\t\tProteus_LoadCharacterSpawn(target, playerPresetName)
+\t\t\t\t\tUtility.Wait(0.1)
+"""
+          insertion = marker + """
+\t\t\t\t\tif gtsActive == true
+\t\t\t\t\t\tActor gtsOutgoingActor = Proteus_GetSpawningActor(playerPresetName)
+\t\t\t\t\t\tif gtsOutgoingActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor) == false
+\t\t\t\t\t\t\tDebug.Notification("GTS profile save failed. Character switch aborted to protect GTS data.")
+\t\t\t\t\t\t\tplayer.GetActorBase().SetInvulnerable(False)
+\t\t\t\t\t\t\treturn
+\t\t\t\t\t\tendIf
+\t\t\t\t\tendIf
+"""
+          if marker not in fn:
+              raise RuntimeError("Stable outgoing switch boundary not found")
+          fn = fn.replace(marker, insertion, 1)
+          text = text[:start] + fn + text[end:]
+
+          path.write_text(text, encoding="utf-8")
+
+          final = path.read_text(encoding="utf-8")
+          new_fn = final[final.index("Function Proteus_NewCharacter(int option)"):]
+          new_fn = new_fn[:new_fn.index("endFunction")]
+          if new_fn.index("GTSPlugin.ProteusBeginNewCharacter(player)") < new_fn.index("GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)"):
+              raise RuntimeError("New Character pending state is armed before outgoing save")
+          switch_fn = final[final.index("Function Proteus_SwitchCharacter()"):]
+          switch_fn = switch_fn[:switch_fn.index("endFunction")]
+          if switch_fn.index("GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)") > switch_fn.index("Proteus_LoadCharacter(player, targetPresetName)"):
+              raise RuntimeError("Outgoing GTS save occurs after Player load")
+
+      - name: Commit refined source
+        shell: bash
+        run: |
+          git config user.name "GTS Proteus compatibility bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ProteusCompat/Source/ProteusRecurringQuestScript.psc
+          git commit -m "Refine Proteus GTS transaction boundaries"
+          git push origin HEAD:diagnostics/racemenu-proteus-sync

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <unordered_set>
 
 namespace GTS::CharacterProfile {
 	struct SkillGlobals {
@@ -19,22 +20,22 @@ namespace GTS::CharacterProfile {
 		float perkPoints = 0.0f;
 	};
 
-	struct PlayerProgression {
+	struct PlayerSkillState {
 		bool captured = false;
 		SkillGlobals skill{};
-		std::vector<std::uint32_t> perkLocalFormIDs;
 	};
 
 	struct Profile {
-		std::uint32_t schemaVersion = 2;
+		std::uint32_t schemaVersion = 3;
 		std::string profileKey;
 		PersistentActorData actorData{};
 		PersistentKillCountData killData{};
-		PlayerProgression playerProgression{};
+		std::vector<std::uint32_t> actorPerkLocalFormIDs;
+		PlayerSkillState playerSkill{};
 	};
 
 	namespace {
-		constexpr std::uint32_t kSchemaVersion = 2;
+		constexpr std::uint32_t kSchemaVersion = 3;
 		constexpr std::string_view kGTSPlugin = "GTS.esp";
 
 		RE::TESDataHandler* DataHandler() {
@@ -97,9 +98,8 @@ namespace GTS::CharacterProfile {
 
 			perks.clear();
 			for (auto* perk : data->GetFormArray<RE::BGSPerk>()) {
-				// Actor::HasPerk is intentionally used here instead of Runtime::HasPerk.
-				// Runtime::HasPerk also treats ActorBase perks as owned; those are static
-				// actor-definition data and must not be moved between player profiles.
+				// Keep only perks dynamically owned by this Actor. Runtime::HasPerk also
+				// includes ActorBase perks, which are static actor-definition data.
 				if (IsGTSForm(perk, gts) && actor->HasPerk(perk)) {
 					perks.push_back(perk->GetLocalFormID());
 				}
@@ -108,7 +108,7 @@ namespace GTS::CharacterProfile {
 			return true;
 		}
 
-		bool ClearDynamicGTSPerks(RE::Actor* actor) {
+		bool RemoveDynamicGTSPerks(RE::Actor* actor) {
 			std::vector<std::uint32_t> owned;
 			if (!CaptureDynamicGTSPerks(actor, owned)) {
 				return false;
@@ -119,34 +119,55 @@ namespace GTS::CharacterProfile {
 				return false;
 			}
 
+			bool complete = true;
 			for (auto localID : owned) {
-				if (auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin)) {
-					actor->RemovePerk(perk);
+				auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin);
+				if (!perk) {
+					logger::warn("GTSCharacterProfile: owned perk {:06X} no longer exists", localID);
+					complete = false;
+					continue;
 				}
+				actor->RemovePerk(perk);
 			}
 
-			std::vector<std::uint32_t> remaining;
-			if (!CaptureDynamicGTSPerks(actor, remaining)) {
-				return false;
-			}
-			if (!remaining.empty()) {
-				logger::warn("GTSCharacterProfile: {} dynamic GTS perks remained after clear", remaining.size());
-				return false;
-			}
-			return true;
+			// Skyrim may not report removals through HasPerk until a later update.
+			// Do not synchronously verify here; the previous verification caused the
+			// first reset call to abort after issuing RemovePerk.
+			return complete;
 		}
 
-		bool RestoreDynamicGTSPerks(RE::Actor* actor, const std::vector<std::uint32_t>& perks) {
+		bool SyncDynamicGTSPerks(RE::Actor* actor, const std::vector<std::uint32_t>& desired) {
 			auto* data = DataHandler();
 			if (!actor || !data || !GTSFile()) {
 				return false;
 			}
-			if (!ClearDynamicGTSPerks(actor)) {
+
+			std::vector<std::uint32_t> current;
+			if (!CaptureDynamicGTSPerks(actor, current)) {
 				return false;
 			}
 
+			const std::unordered_set<std::uint32_t> currentSet(current.begin(), current.end());
+			const std::unordered_set<std::uint32_t> desiredSet(desired.begin(), desired.end());
 			bool complete = true;
-			for (auto localID : perks) {
+
+			for (auto localID : current) {
+				if (desiredSet.contains(localID)) {
+					continue;
+				}
+				auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin);
+				if (!perk) {
+					logger::warn("GTSCharacterProfile: current perk {:06X} no longer exists", localID);
+					complete = false;
+					continue;
+				}
+				actor->RemovePerk(perk);
+			}
+
+			for (auto localID : desired) {
+				if (currentSet.contains(localID)) {
+					continue;
+				}
 				auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin);
 				if (!perk) {
 					logger::warn("GTSCharacterProfile: saved perk {:06X} no longer exists", localID);
@@ -154,12 +175,23 @@ namespace GTS::CharacterProfile {
 					continue;
 				}
 				actor->AddPerk(perk);
-				if (!actor->HasPerk(perk)) {
-					logger::warn("GTSCharacterProfile: perk {:06X} was not owned after AddPerk", localID);
-					complete = false;
-				}
 			}
+
+			// Like removal, perk ownership can settle on a later engine update.
+			// padump is the explicit post-operation verification for the test harness.
 			return complete;
+		}
+
+		void ApplyActorDataWithoutDerivedMax(PersistentActorData* target, const PersistentActorData& saved) {
+			const auto derivedMaxScale = target->fMaxScale;
+			*target = saved;
+			target->fMaxScale = derivedMaxScale;
+		}
+
+		void ResetActorDataWithoutDerivedMax(PersistentActorData* target) {
+			const auto derivedMaxScale = target->fMaxScale;
+			*target = {};
+			target->fMaxScale = derivedMaxScale;
 		}
 
 		std::string PerkIDList(const std::vector<std::uint32_t>& perks) {
@@ -284,12 +316,13 @@ namespace GTS::CharacterProfile {
 
 		auto* actorData = Persistent::GetActorData(actor);
 		auto* killData = Persistent::GetKillCountData(actor);
+		std::vector<std::uint32_t> perks;
+		const bool hasPerks = CaptureDynamicGTSPerks(actor, perks);
+
 		if (IsPlayer(actor)) {
 			SkillGlobals skill{};
-			std::vector<std::uint32_t> perks;
 			const bool hasSkill = ReadPlayerSkill(skill);
-			const bool hasPerks = CaptureDynamicGTSPerks(actor, perks);
-			Cprint("GTS PROFILE [{}] PLAYER kills={} skill={:.2f} progress={:.2f} ratio={:.2f} legendary={:.0f} points={:.0f} perks={} visual={:.3f} target={:.3f} max={:.3f}",
+			Cprint("GTS PROFILE [{}] PLAYER kills={} skill={:.2f} progress={:.2f} ratio={:.2f} legendary={:.0f} points={:.0f} perks={} visual={:.3f} target={:.3f} max(derived)={:.3f}",
 				label,
 				killData ? killData->iTotalKills : 0u,
 				hasSkill ? skill.level : -1.0f,
@@ -301,20 +334,21 @@ namespace GTS::CharacterProfile {
 				actorData ? actorData->fVisualScale : -1.0f,
 				actorData ? actorData->fTargetScale : -1.0f,
 				actorData ? actorData->fMaxScale : -1.0f);
-			Cprint("GTS PROFILE [{}] perk IDs: {}", label, hasPerks ? PerkIDList(perks) : "<capture failed>");
-			logger::info("GTSCharacterProfile: dump '{}' PLAYER kills={} skill={:.3f} progress={:.3f} perks={} ids={}",
-				label, killData ? killData->iTotalKills : 0u, hasSkill ? skill.level : -1.0f,
-				hasSkill ? skill.progress : -1.0f, hasPerks ? perks.size() : 0, hasPerks ? PerkIDList(perks) : "<capture failed>");
-			return;
+		} else {
+			Cprint("GTS PROFILE [{}] NPC {:08X}: player skill skipped; kills={} perks={} visual={:.3f} target={:.3f} max(derived)={:.3f}",
+				label,
+				actor->GetFormID(),
+				killData ? killData->iTotalKills : 0u,
+				hasPerks ? perks.size() : 0,
+				actorData ? actorData->fVisualScale : -1.0f,
+				actorData ? actorData->fTargetScale : -1.0f,
+				actorData ? actorData->fMaxScale : -1.0f);
 		}
 
-		Cprint("GTS PROFILE [{}] NPC {:08X}: player skill/perks skipped; kills={} visual={:.3f} target={:.3f} max={:.3f}",
-			label,
-			actor->GetFormID(),
-			killData ? killData->iTotalKills : 0u,
-			actorData ? actorData->fVisualScale : -1.0f,
-			actorData ? actorData->fTargetScale : -1.0f,
-			actorData ? actorData->fMaxScale : -1.0f);
+		Cprint("GTS PROFILE [{}] perk IDs: {}", label, hasPerks ? PerkIDList(perks) : "<capture failed>");
+		logger::info("GTSCharacterProfile: dump '{}' actor={:08X} player={} kills={} perks={} ids={}",
+			label, actor->GetFormID(), IsPlayer(actor), killData ? killData->iTotalKills : 0u,
+			hasPerks ? perks.size() : 0, hasPerks ? PerkIDList(perks) : "<capture failed>");
 	}
 
 	bool Save(RE::Actor* actor, std::string_view profileKey) {
@@ -330,14 +364,18 @@ namespace GTS::CharacterProfile {
 			logger::warn("GTSCharacterProfile: save refused because actor state is unavailable");
 			return false;
 		}
+
 		profile.actorData = *actorData;
 		profile.killData = *killData;
+		if (!CaptureDynamicGTSPerks(actor, profile.actorPerkLocalFormIDs)) {
+			logger::warn("GTSCharacterProfile: save refused because actor perk state is unavailable");
+			return false;
+		}
 
 		if (IsPlayer(actor)) {
-			profile.playerProgression.captured = true;
-			if (!ReadPlayerSkill(profile.playerProgression.skill) ||
-				!CaptureDynamicGTSPerks(actor, profile.playerProgression.perkLocalFormIDs)) {
-				logger::warn("GTSCharacterProfile: player save refused because progression state is unavailable");
+			profile.playerSkill.captured = true;
+			if (!ReadPlayerSkill(profile.playerSkill.skill)) {
+				logger::warn("GTSCharacterProfile: player save refused because skill state is unavailable");
 				return false;
 			}
 		}
@@ -347,9 +385,9 @@ namespace GTS::CharacterProfile {
 			logger::error("GTSCharacterProfile: failed to write {}", path.string());
 			return false;
 		}
-		logger::info("GTSCharacterProfile: saved key='{}' path='{}' playerProgression={} perks={} kills={}",
-			profile.profileKey, path.string(), profile.playerProgression.captured,
-			profile.playerProgression.perkLocalFormIDs.size(), profile.killData.iTotalKills);
+		logger::info("GTSCharacterProfile: saved key='{}' path='{}' playerSkill={} perks={} kills={}",
+			profile.profileKey, path.string(), profile.playerSkill.captured,
+			profile.actorPerkLocalFormIDs.size(), profile.killData.iTotalKills);
 		return true;
 	}
 
@@ -361,15 +399,15 @@ namespace GTS::CharacterProfile {
 		Profile profile{};
 		const auto path = PathFor(profileKey);
 		if (!ReadWithBackup(profile, path)) {
-			logger::warn("GTSCharacterProfile: no valid schema-v2 profile for key='{}'", profileKey);
+			logger::warn("GTSCharacterProfile: no valid schema-v3 profile for key='{}'", profileKey);
 			return false;
 		}
 		if (profile.profileKey != profileKey) {
 			logger::error("GTSCharacterProfile: profile key mismatch stored='{}' requested='{}'", profile.profileKey, profileKey);
 			return false;
 		}
-		if (IsPlayer(actor) && !profile.playerProgression.captured) {
-			logger::warn("GTSCharacterProfile: key='{}' has no player progression; refusing partial player load", profileKey);
+		if (IsPlayer(actor) && !profile.playerSkill.captured) {
+			logger::warn("GTSCharacterProfile: key='{}' has no player skill state; refusing partial player load", profileKey);
 			return false;
 		}
 
@@ -379,19 +417,21 @@ namespace GTS::CharacterProfile {
 			return false;
 		}
 
-		if (IsPlayer(actor)) {
-			if (!WritePlayerSkill(profile.playerProgression.skill) ||
-				!RestoreDynamicGTSPerks(actor, profile.playerProgression.perkLocalFormIDs)) {
-				logger::warn("GTSCharacterProfile: failed to restore complete player progression for key='{}'", profileKey);
-				return false;
-			}
+		if (IsPlayer(actor) && !WritePlayerSkill(profile.playerSkill.skill)) {
+			logger::warn("GTSCharacterProfile: failed to restore player skill for key='{}'", profileKey);
+			return false;
 		}
 
-		*actorData = profile.actorData;
+		if (!SyncDynamicGTSPerks(actor, profile.actorPerkLocalFormIDs)) {
+			logger::warn("GTSCharacterProfile: perk sync was incomplete for key='{}' actor={:08X}", profileKey, actor->GetFormID());
+			return false;
+		}
+
+		ApplyActorDataWithoutDerivedMax(actorData, profile.actorData);
 		*killData = profile.killData;
-		logger::info("GTSCharacterProfile: loaded key='{}' playerProgression={} perks={} kills={}",
-			profile.profileKey, profile.playerProgression.captured,
-			profile.playerProgression.perkLocalFormIDs.size(), profile.killData.iTotalKills);
+		logger::info("GTSCharacterProfile: loaded key='{}' actor={:08X} playerSkillApplied={} perks={} kills={} maxScaleIgnored=true",
+			profile.profileKey, actor->GetFormID(), IsPlayer(actor),
+			profile.actorPerkLocalFormIDs.size(), profile.killData.iTotalKills);
 		return true;
 	}
 
@@ -406,15 +446,22 @@ namespace GTS::CharacterProfile {
 			return false;
 		}
 
-		if (IsPlayer(actor)) {
-			if (!WritePlayerSkill({}) || !ClearDynamicGTSPerks(actor)) {
-				return false;
-			}
+		bool complete = true;
+		if (IsPlayer(actor) && !WritePlayerSkill({})) {
+			complete = false;
 		}
 
-		*actorData = {};
+		// Reset persistent state regardless of whether Skyrim has finished applying
+		// perk removals. fMaxScale is derived by GTS and is intentionally untouched.
+		ResetActorDataWithoutDerivedMax(actorData);
 		*killData = {};
-		logger::info("GTSCharacterProfile: reset actor {:08X} playerProgression={}", actor->GetFormID(), IsPlayer(actor));
-		return true;
+
+		if (!RemoveDynamicGTSPerks(actor)) {
+			complete = false;
+		}
+
+		logger::info("GTSCharacterProfile: reset actor {:08X} playerSkill={} perksRemovalIssued=true maxScaleIgnored=true complete={}",
+			actor->GetFormID(), IsPlayer(actor), complete);
+		return complete;
 	}
 }

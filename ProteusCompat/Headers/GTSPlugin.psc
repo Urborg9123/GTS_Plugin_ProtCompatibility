@@ -17,8 +17,8 @@ Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global na
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
-; Wrapper transaction entry. Proteus calls this before it begins rebuilding
-; Player for New Character; RaceMenu close is only the completion barrier.
+; Wrapper transaction entry shared by normal and alternative-death New Character.
+; RaceMenu close is only the completion barrier for a transaction already begun here.
 Function ProteusBeginNewCharacter(Actor akPlayer) global native
 
 ; Devourment Compatibility

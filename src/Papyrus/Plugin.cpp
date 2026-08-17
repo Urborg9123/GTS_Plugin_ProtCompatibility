@@ -1,5 +1,6 @@
 #include "Papyrus/Plugin.hpp"
 #include "Compat/ProteusProfile.hpp"
+#include "Compat/ProteusSync.hpp"
 #include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
@@ -82,6 +83,10 @@ namespace {
 		GTS::ProteusProfile::ResetNewCharacter(player);
 	}
 
+	void ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player) {
+		GTS::ProteusSync::BeginNewCharacter(player);
+	}
+
 	void ResetQuestProgression(StaticFunctionTag*) {
 		GTS::ResetQuest();
 	}
@@ -155,6 +160,7 @@ namespace GTS {
 		vm->RegisterFunction("ProteusProfileSave", PapyrusClass, ProteusProfileSave);
 		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
+		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
 
 		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);

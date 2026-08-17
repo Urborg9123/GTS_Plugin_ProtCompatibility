@@ -230,7 +230,7 @@ namespace GTS {
 					scale += 2.0f;
 				}
 				const float BonusDamageMult = Config::Balance.fStatBonusDamageMult;
-				float DamageStorage = 1.0f + ((BonusDamageMult) * (scale - 1.0f));
+				const float DamageStorage = 1.0f + ((BonusDamageMult) * (scale - 1.0f));
 
 				float might = 1.0f + Potion_GetMightBonus(actor);
 
@@ -314,6 +314,7 @@ namespace GTS {
 						originalValue -= lastEdit;
 						return originalValue;
 					}
+				}
 			}
 
 			default: return originalValue;

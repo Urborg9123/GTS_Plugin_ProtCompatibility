@@ -1,6 +1,7 @@
 #include "Compat/GTSCharacterProfile.hpp"
 
 #include "Data/Persistent.hpp"
+#include "Data/Runtime.hpp"
 #include "Utils/Text/Text.hpp"
 
 #include <glaze/glaze.hpp>
@@ -18,24 +19,23 @@ namespace GTS::CharacterProfile {
 		float perkPoints = 0.0f;
 	};
 
-	struct Profile {
-		std::uint32_t schemaVersion = 1;
-		std::string profileKey;
-		PersistentActorData actorData{};
-		PersistentKillCountData killData{};
+	struct PlayerProgression {
+		bool captured = false;
 		SkillGlobals skill{};
 		std::vector<std::uint32_t> perkLocalFormIDs;
 	};
 
-	namespace {
-		constexpr std::uint32_t kSchemaVersion = 1;
-		constexpr std::string_view kGTSPlugin = "GTS.esp";
+	struct Profile {
+		std::uint32_t schemaVersion = 2;
+		std::string profileKey;
+		PersistentActorData actorData{};
+		PersistentKillCountData killData{};
+		PlayerProgression playerProgression{};
+	};
 
-		constexpr RE::FormID kSkillLevel = 0x142200;
-		constexpr RE::FormID kSkillProgress = 0x142201;
-		constexpr RE::FormID kSkillRatio = 0x142202;
-		constexpr RE::FormID kSkillLegendary = 0x142203;
-		constexpr RE::FormID kSkillPerkPoints = 0x2352E1;
+	namespace {
+		constexpr std::uint32_t kSchemaVersion = 2;
+		constexpr std::string_view kGTSPlugin = "GTS.esp";
 
 		RE::TESDataHandler* DataHandler() {
 			return RE::TESDataHandler::GetSingleton();
@@ -46,17 +46,16 @@ namespace GTS::CharacterProfile {
 			return data ? data->LookupModByName(kGTSPlugin) : nullptr;
 		}
 
-		RE::TESGlobal* Global(RE::FormID localFormID) {
-			auto* data = DataHandler();
-			return data ? data->LookupForm<RE::TESGlobal>(localFormID, kGTSPlugin) : nullptr;
+		bool IsPlayer(const RE::Actor* actor) {
+			return actor && actor->IsPlayerRef();
 		}
 
-		bool ReadSkill(SkillGlobals& value) {
-			auto* level = Global(kSkillLevel);
-			auto* progress = Global(kSkillProgress);
-			auto* ratio = Global(kSkillRatio);
-			auto* legendary = Global(kSkillLegendary);
-			auto* perkPoints = Global(kSkillPerkPoints);
+		bool ReadPlayerSkill(SkillGlobals& value) {
+			auto* level = Runtime::GetGlobal(Runtime::GLOB.GTSSkillLevel);
+			auto* progress = Runtime::GetGlobal(Runtime::GLOB.GTSSkillProgress);
+			auto* ratio = Runtime::GetGlobal(Runtime::GLOB.GTSSkillRatio);
+			auto* legendary = Runtime::GetGlobal(Runtime::GLOB.GTSSkillLegendary);
+			auto* perkPoints = Runtime::GetGlobal(Runtime::GLOB.GTSSkillPerkPoints);
 			if (!level || !progress || !ratio || !legendary || !perkPoints) {
 				return false;
 			}
@@ -68,12 +67,12 @@ namespace GTS::CharacterProfile {
 			return true;
 		}
 
-		bool WriteSkill(const SkillGlobals& value) {
-			auto* level = Global(kSkillLevel);
-			auto* progress = Global(kSkillProgress);
-			auto* ratio = Global(kSkillRatio);
-			auto* legendary = Global(kSkillLegendary);
-			auto* perkPoints = Global(kSkillPerkPoints);
+		bool WritePlayerSkill(const SkillGlobals& value) {
+			auto* level = Runtime::GetGlobal(Runtime::GLOB.GTSSkillLevel);
+			auto* progress = Runtime::GetGlobal(Runtime::GLOB.GTSSkillProgress);
+			auto* ratio = Runtime::GetGlobal(Runtime::GLOB.GTSSkillRatio);
+			auto* legendary = Runtime::GetGlobal(Runtime::GLOB.GTSSkillLegendary);
+			auto* perkPoints = Runtime::GetGlobal(Runtime::GLOB.GTSSkillPerkPoints);
 			if (!level || !progress || !ratio || !legendary || !perkPoints) {
 				return false;
 			}
@@ -89,14 +88,18 @@ namespace GTS::CharacterProfile {
 			return form && gtsFile && form->GetFile(0) == gtsFile;
 		}
 
-		bool CapturePerks(RE::Actor* actor, std::vector<std::uint32_t>& perks) {
+		bool CaptureDynamicGTSPerks(RE::Actor* actor, std::vector<std::uint32_t>& perks) {
 			auto* data = DataHandler();
 			auto* gts = GTSFile();
 			if (!actor || !data || !gts) {
 				return false;
 			}
+
 			perks.clear();
 			for (auto* perk : data->GetFormArray<RE::BGSPerk>()) {
+				// Actor::HasPerk is intentionally used here instead of Runtime::HasPerk.
+				// Runtime::HasPerk also treats ActorBase perks as owned; those are static
+				// actor-definition data and must not be moved between player profiles.
 				if (IsGTSForm(perk, gts) && actor->HasPerk(perk)) {
 					perks.push_back(perk->GetLocalFormID());
 				}
@@ -105,39 +108,72 @@ namespace GTS::CharacterProfile {
 			return true;
 		}
 
-		bool ClearPerks(RE::Actor* actor) {
-			auto* data = DataHandler();
-			auto* gts = GTSFile();
-			if (!actor || !data || !gts) {
+		bool ClearDynamicGTSPerks(RE::Actor* actor) {
+			std::vector<std::uint32_t> owned;
+			if (!CaptureDynamicGTSPerks(actor, owned)) {
 				return false;
 			}
-			for (auto* perk : data->GetFormArray<RE::BGSPerk>()) {
-				if (IsGTSForm(perk, gts) && actor->HasPerk(perk)) {
+
+			auto* data = DataHandler();
+			if (!data) {
+				return false;
+			}
+
+			for (auto localID : owned) {
+				if (auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin)) {
 					actor->RemovePerk(perk);
 				}
+			}
+
+			std::vector<std::uint32_t> remaining;
+			if (!CaptureDynamicGTSPerks(actor, remaining)) {
+				return false;
+			}
+			if (!remaining.empty()) {
+				logger::warn("GTSCharacterProfile: {} dynamic GTS perks remained after clear", remaining.size());
+				return false;
 			}
 			return true;
 		}
 
-		bool RestorePerks(RE::Actor* actor, const std::vector<std::uint32_t>& perks) {
+		bool RestoreDynamicGTSPerks(RE::Actor* actor, const std::vector<std::uint32_t>& perks) {
 			auto* data = DataHandler();
 			if (!actor || !data || !GTSFile()) {
 				return false;
 			}
-			if (!ClearPerks(actor)) {
+			if (!ClearDynamicGTSPerks(actor)) {
 				return false;
 			}
+
+			bool complete = true;
 			for (auto localID : perks) {
 				auto* perk = data->LookupForm<RE::BGSPerk>(localID, kGTSPlugin);
 				if (!perk) {
 					logger::warn("GTSCharacterProfile: saved perk {:06X} no longer exists", localID);
+					complete = false;
 					continue;
 				}
+				actor->AddPerk(perk);
 				if (!actor->HasPerk(perk)) {
-					actor->AddPerk(perk);
+					logger::warn("GTSCharacterProfile: perk {:06X} was not owned after AddPerk", localID);
+					complete = false;
 				}
 			}
-			return true;
+			return complete;
+		}
+
+		std::string PerkIDList(const std::vector<std::uint32_t>& perks) {
+			if (perks.empty()) {
+				return "<none>";
+			}
+			std::string result;
+			for (std::size_t i = 0; i < perks.size(); ++i) {
+				if (i != 0) {
+					result += ',';
+				}
+				result += std::format("{:06X}", perks[i]);
+			}
+			return result;
 		}
 
 		std::string SafeKey(std::string_view key) {
@@ -238,11 +274,6 @@ namespace GTS::CharacterProfile {
 			}
 			return false;
 		}
-
-		std::size_t CountPerks(RE::Actor* actor) {
-			std::vector<std::uint32_t> perks;
-			return CapturePerks(actor, perks) ? perks.size() : 0;
-		}
 	}
 
 	void Dump(RE::Actor* actor, std::string_view label) {
@@ -250,48 +281,75 @@ namespace GTS::CharacterProfile {
 			Cprint("GTS profile {}: actor is null", label);
 			return;
 		}
+
 		auto* actorData = Persistent::GetActorData(actor);
 		auto* killData = Persistent::GetKillCountData(actor);
-		SkillGlobals skill{};
-		const bool hasSkill = ReadSkill(skill);
-		const auto perkCount = CountPerks(actor);
-		Cprint("GTS PROFILE [{}] kills={} skill={:.2f} progress={:.2f} ratio={:.2f} legendary={:.0f} points={:.0f} perks={} visual={:.3f} target={:.3f} max={:.3f}",
+		if (IsPlayer(actor)) {
+			SkillGlobals skill{};
+			std::vector<std::uint32_t> perks;
+			const bool hasSkill = ReadPlayerSkill(skill);
+			const bool hasPerks = CaptureDynamicGTSPerks(actor, perks);
+			Cprint("GTS PROFILE [{}] PLAYER kills={} skill={:.2f} progress={:.2f} ratio={:.2f} legendary={:.0f} points={:.0f} perks={} visual={:.3f} target={:.3f} max={:.3f}",
+				label,
+				killData ? killData->iTotalKills : 0u,
+				hasSkill ? skill.level : -1.0f,
+				hasSkill ? skill.progress : -1.0f,
+				hasSkill ? skill.ratio : -1.0f,
+				hasSkill ? skill.legendary : -1.0f,
+				hasSkill ? skill.perkPoints : -1.0f,
+				hasPerks ? perks.size() : 0,
+				actorData ? actorData->fVisualScale : -1.0f,
+				actorData ? actorData->fTargetScale : -1.0f,
+				actorData ? actorData->fMaxScale : -1.0f);
+			Cprint("GTS PROFILE [{}] perk IDs: {}", label, hasPerks ? PerkIDList(perks) : "<capture failed>");
+			logger::info("GTSCharacterProfile: dump '{}' PLAYER kills={} skill={:.3f} progress={:.3f} perks={} ids={}",
+				label, killData ? killData->iTotalKills : 0u, hasSkill ? skill.level : -1.0f,
+				hasSkill ? skill.progress : -1.0f, hasPerks ? perks.size() : 0, hasPerks ? PerkIDList(perks) : "<capture failed>");
+			return;
+		}
+
+		Cprint("GTS PROFILE [{}] NPC {:08X}: player skill/perks skipped; kills={} visual={:.3f} target={:.3f} max={:.3f}",
 			label,
+			actor->GetFormID(),
 			killData ? killData->iTotalKills : 0u,
-			hasSkill ? skill.level : -1.0f,
-			hasSkill ? skill.progress : -1.0f,
-			hasSkill ? skill.ratio : -1.0f,
-			hasSkill ? skill.legendary : -1.0f,
-			hasSkill ? skill.perkPoints : -1.0f,
-			perkCount,
 			actorData ? actorData->fVisualScale : -1.0f,
 			actorData ? actorData->fTargetScale : -1.0f,
 			actorData ? actorData->fMaxScale : -1.0f);
-		logger::info("GTSCharacterProfile: dump '{}' kills={} perks={} skill={:.3f}", label,
-			killData ? killData->iTotalKills : 0u, perkCount, hasSkill ? skill.level : -1.0f);
 	}
 
 	bool Save(RE::Actor* actor, std::string_view profileKey) {
 		if (!actor || !GTSFile()) {
 			return false;
 		}
+
 		Profile profile{};
 		profile.profileKey = std::string(profileKey);
 		auto* actorData = Persistent::GetActorData(actor);
 		auto* killData = Persistent::GetKillCountData(actor);
-		if (!actorData || !killData || !ReadSkill(profile.skill) || !CapturePerks(actor, profile.perkLocalFormIDs)) {
-			logger::warn("GTSCharacterProfile: save refused because complete GTS state is unavailable");
+		if (!actorData || !killData) {
+			logger::warn("GTSCharacterProfile: save refused because actor state is unavailable");
 			return false;
 		}
 		profile.actorData = *actorData;
 		profile.killData = *killData;
+
+		if (IsPlayer(actor)) {
+			profile.playerProgression.captured = true;
+			if (!ReadPlayerSkill(profile.playerProgression.skill) ||
+				!CaptureDynamicGTSPerks(actor, profile.playerProgression.perkLocalFormIDs)) {
+				logger::warn("GTSCharacterProfile: player save refused because progression state is unavailable");
+				return false;
+			}
+		}
+
 		const auto path = PathFor(profileKey);
 		if (!WriteFile(profile, path)) {
 			logger::error("GTSCharacterProfile: failed to write {}", path.string());
 			return false;
 		}
-		logger::info("GTSCharacterProfile: saved key='{}' path='{}' perks={} kills={}",
-			profile.profileKey, path.string(), profile.perkLocalFormIDs.size(), profile.killData.iTotalKills);
+		logger::info("GTSCharacterProfile: saved key='{}' path='{}' playerProgression={} perks={} kills={}",
+			profile.profileKey, path.string(), profile.playerProgression.captured,
+			profile.playerProgression.perkLocalFormIDs.size(), profile.killData.iTotalKills);
 		return true;
 	}
 
@@ -299,28 +357,41 @@ namespace GTS::CharacterProfile {
 		if (!actor || !GTSFile()) {
 			return false;
 		}
+
 		Profile profile{};
 		const auto path = PathFor(profileKey);
 		if (!ReadWithBackup(profile, path)) {
-			logger::warn("GTSCharacterProfile: no valid profile for key='{}'", profileKey);
+			logger::warn("GTSCharacterProfile: no valid schema-v2 profile for key='{}'", profileKey);
 			return false;
 		}
 		if (profile.profileKey != profileKey) {
 			logger::error("GTSCharacterProfile: profile key mismatch stored='{}' requested='{}'", profile.profileKey, profileKey);
 			return false;
 		}
+		if (IsPlayer(actor) && !profile.playerProgression.captured) {
+			logger::warn("GTSCharacterProfile: key='{}' has no player progression; refusing partial player load", profileKey);
+			return false;
+		}
+
 		auto* actorData = Persistent::GetActorData(actor);
 		auto* killData = Persistent::GetKillCountData(actor);
-		if (!actorData || !killData || !WriteSkill(profile.skill)) {
+		if (!actorData || !killData) {
 			return false;
 		}
+
+		if (IsPlayer(actor)) {
+			if (!WritePlayerSkill(profile.playerProgression.skill) ||
+				!RestoreDynamicGTSPerks(actor, profile.playerProgression.perkLocalFormIDs)) {
+				logger::warn("GTSCharacterProfile: failed to restore complete player progression for key='{}'", profileKey);
+				return false;
+			}
+		}
+
 		*actorData = profile.actorData;
 		*killData = profile.killData;
-		if (!RestorePerks(actor, profile.perkLocalFormIDs)) {
-			return false;
-		}
-		logger::info("GTSCharacterProfile: loaded key='{}' perks={} kills={}",
-			profile.profileKey, profile.perkLocalFormIDs.size(), profile.killData.iTotalKills);
+		logger::info("GTSCharacterProfile: loaded key='{}' playerProgression={} perks={} kills={}",
+			profile.profileKey, profile.playerProgression.captured,
+			profile.playerProgression.perkLocalFormIDs.size(), profile.killData.iTotalKills);
 		return true;
 	}
 
@@ -328,17 +399,22 @@ namespace GTS::CharacterProfile {
 		if (!actor || !GTSFile()) {
 			return false;
 		}
+
 		auto* actorData = Persistent::GetActorData(actor);
 		auto* killData = Persistent::GetKillCountData(actor);
 		if (!actorData || !killData) {
 			return false;
 		}
+
+		if (IsPlayer(actor)) {
+			if (!WritePlayerSkill({}) || !ClearDynamicGTSPerks(actor)) {
+				return false;
+			}
+		}
+
 		*actorData = {};
 		*killData = {};
-		if (!WriteSkill({}) || !ClearPerks(actor)) {
-			return false;
-		}
-		logger::info("GTSCharacterProfile: reset actor {:08X}", actor->GetFormID());
+		logger::info("GTSCharacterProfile: reset actor {:08X} playerProgression={}", actor->GetFormID(), IsPlayer(actor));
 		return true;
 	}
 }

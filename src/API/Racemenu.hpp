@@ -35,6 +35,7 @@ namespace GTS {
 
 		std::string DebugName() override;
 		void OnPluginPostLoad() override;
+		void MenuChange(const RE::MenuOpenCloseEvent* menu_event) override;
 
 		private:
 		static inline SKEE::IBodyMorphInterface* iBodyMorphIntfc = nullptr;

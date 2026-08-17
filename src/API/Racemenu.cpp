@@ -88,4 +88,26 @@ namespace GTS {
 	void Racemenu::OnPluginPostLoad() {
 		Register();
 	}
+
+	void Racemenu::MenuChange(const RE::MenuOpenCloseEvent* menu_event) {
+		if (!menu_event || menu_event->menuName != RE::RaceSexMenu::MENU_NAME) {
+			return;
+		}
+
+		if (menu_event->opening) {
+			auto* player = RE::PlayerCharacter::GetSingleton();
+			const char* name = player ? player->GetDisplayFullName() : nullptr;
+			logger::info("ProteusRaceMenuDiag: OPEN playerName='{}'", name ? name : "<null>");
+			return;
+		}
+
+		logger::info("ProteusRaceMenuDiag: CLOSE observed; queueing player-name read");
+		if (auto* task = SKSE::GetTaskInterface()) {
+			task->AddTask([]() {
+				auto* player = RE::PlayerCharacter::GetSingleton();
+				const char* name = player ? player->GetDisplayFullName() : nullptr;
+				logger::info("ProteusRaceMenuDiag: AFTER CLOSE playerName='{}'", name ? name : "<null>");
+			});
+		}
+	}
 }

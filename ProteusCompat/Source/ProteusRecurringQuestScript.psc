@@ -464,9 +464,6 @@ endEvent
 Function Proteus_NewCharacter(int option) ;0 = regular new character process that makes a spawn, 1 = death of previous character
 	;Never rely on a stale gtsActive value from a persistent quest script.
 	Proteus_CheckActiveMods()
-	if gtsActive == true
-		GTSPlugin.ProteusBeginNewCharacter(player)
-	endIf
 	player.GetActorBase().SetInvulnerable(True)
 	Debug.Notification("New character function started.")
 	if option == 0
@@ -480,9 +477,11 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 		Utility.Wait(0.1)
 		Proteus_LoadCharacterSpawn(player, characterSavingName)
 		if gtsActive == true
-			Actor gtsOutgoingActor = Proteus_GetSpawnActor(characterSavingName)
-			if gtsOutgoingActor != NONE
-				GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
+			Actor gtsOutgoingActor = Proteus_GetSpawningActor(characterSavingName)
+			if gtsOutgoingActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor) == false
+				Debug.Notification("GTS profile save failed. New character creation aborted to protect GTS data.")
+				player.GetActorBase().SetInvulnerable(False)
+				return
 			endIf
 		endIf
 		Utility.Wait(0.1)
@@ -499,12 +498,18 @@ Function Proteus_NewCharacter(int option) ;0 = regular new character process tha
 		SaveAppearancePresetJSON(processedPLAYERPRESETName, presetName)
 		Proteus_SaveGlobalVariables(presetName)
 		if gtsActive == true
-			Actor gtsOutgoingDeathActor = Proteus_GetSpawnActor(presetName)
-			if gtsOutgoingDeathActor != NONE
-				GTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor)
+			Actor gtsOutgoingDeathActor = Proteus_GetSpawningActor(presetName)
+			if gtsOutgoingDeathActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingDeathActor) == false
+				Debug.Notification("GTS profile save failed. New character creation aborted to protect GTS data.")
+				player.GetActorBase().SetInvulnerable(False)
+				return
 			endIf
 		endIf
 		Proteus_ResetSpawn(presetName, 0)
+	endIf
+
+	if gtsActive == true
+		GTSPlugin.ProteusBeginNewCharacter(player)
 	endIf
 
 	;reset skills, attributes, experience, perk points available
@@ -5468,12 +5473,6 @@ Function Proteus_SwitchCharacter()
 		if (targetNameLength > 0)	
 			;save current character 
 			String playerName = player.GetActorBase().GetName()
-			if gtsActive == true
-				Actor gtsOutgoingActor = Proteus_GetSpawnActor(playerName)
-				if gtsOutgoingActor != NONE
-					GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor)
-				endIf
-			endIf
 			Proteus_CharacterSave(player, playerName)
 			Utility.Wait(0.1)
 
@@ -5519,6 +5518,15 @@ Function Proteus_SwitchCharacter()
 					Utility.Wait(0.1)
 					Proteus_LoadCharacterSpawn(target, playerPresetName)
 					Utility.Wait(0.1)
+
+					if gtsActive == true
+						Actor gtsOutgoingActor = Proteus_GetSpawningActor(playerPresetName)
+						if gtsOutgoingActor == NONE || GTSPlugin.ProteusProfileSave(player, gtsOutgoingActor) == false
+							Debug.Notification("GTS profile save failed. Character switch aborted to protect GTS data.")
+							player.GetActorBase().SetInvulnerable(False)
+							return
+						endIf
+					endIf
 					Proteus_ClearFollowers(playerPresetName)
 					Utility.Wait(0.1)
 					Proteus_LoadCharacter(player, targetPresetName)

@@ -3,6 +3,7 @@
 
 #include "API/Racemenu.hpp"
 #include "API/SmoothCam.hpp"
+#include "Compat/ProteusRaceMenuMonitor.hpp"
 
 #include "Config/ConfigModHandler.hpp"
 #include "Config/Keybinds.hpp"
@@ -99,6 +100,7 @@ namespace GTS {
 		EventDispatcher::AddListener(&ConfigModHandler::GetSingleton());
 		EventDispatcher::AddListener(&MorphManager::GetSingleton());
 		EventDispatcher::AddListener(&DynamicCollisionManager::GetSingleton());
+		ProteusRaceMenuMonitor::Register();
 
 		logger::info("Managers Registered");
 	}

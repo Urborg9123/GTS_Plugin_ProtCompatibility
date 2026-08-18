@@ -1,6 +1,6 @@
 --- a/ProteusCompat/Source/ProteusRecurringQuestScript.psc
 +++ b/ProteusCompat/Source/ProteusRecurringQuestScript.psc
-@@ -486,13 +486,11 @@
+@@ -486,13 +486,13 @@
  		;The outgoing character now has its stable Proteus actor reference.
 -		;Save GTS only after that identity exists; JSON is the authoritative copy.
 +		;Arm the GTS lifecycle wrapper only after that identity exists.
@@ -12,6 +12,8 @@
 -					player.GetActorBase().SetInvulnerable(False)
 -					return
 -				endIf
++			Debug.Notification("[GTSWRAP] Papyrus BeginNewCharacter reached")
++			Debug.Trace("[GTSWRAP] Papyrus BeginNewCharacter reached: " + characterSavingName)
 +			if GTSPlugin.ProteusBeginNewCharacter(player, outgoingGTSActor, characterSavingName) == false
 +				Debug.Notification("GTS wrapper could not save the outgoing character. New character creation aborted.")
 +				player.GetActorBase().SetInvulnerable(False)
@@ -19,7 +21,7 @@
  			endIf
  		endIf
  	elseif option == 1
-@@ -551,6 +549,2 @@
+@@ -551,6 +551,2 @@
 -	;Reset all character-specific GTS state natively. This clears persistent
 -	;actor data, the full kill breakdown, GTS skill globals, perks and spells.
 -	if Game.GetModByName("GTS.esp") != 255
@@ -28,13 +30,15 @@
 +	;GTS reset is deferred until the wrapper confirms RaceMenu completed.
  
  	;reset vampirism status
-@@ -606,6 +600,10 @@
+@@ -606,6 +602,12 @@
 -	;RaceMenu and startup scripts can reapply abilities, so perform one final
 -	;native reset immediately before the new Proteus character is saved.
 +	;RaceMenu and startup scripts are complete. Finalize the GTS transaction
 +	;immediately before Proteus saves the new character.
  	if Game.GetModByName("GTS.esp") != 255
 -		GTSPlugin.ProteusProfileResetNewCharacter(player)
++		Debug.Notification("[GTSWRAP] Papyrus FinalizeNewCharacter reached")
++		Debug.Trace("[GTSWRAP] Papyrus FinalizeNewCharacter reached")
 +		if GTSPlugin.ProteusFinalizeNewCharacter(player) == false
 +			Debug.Notification("GTS wrapper finalization failed. New character save aborted.")
 +			player.GetActorBase().SetInvulnerable(False)
@@ -43,7 +47,7 @@
  	endIf
  
  	;save new character into the Proteus system
-@@ -5455,16 +5453,14 @@
+@@ -5455,16 +5457,16 @@
 -					;The outgoing character now has a stable Proteus actor. Persist its
 -					;complete GTS character state before Player 0x14 is rewritten.
 +					;The outgoing character now has a stable Proteus actor. Save its
@@ -56,6 +60,8 @@
 -								player.GetActorBase().SetInvulnerable(False)
 -								return
 -							endIf
++						Debug.Notification("[GTSWRAP] Papyrus BeginSwitch reached")
++						Debug.Trace("[GTSWRAP] Papyrus BeginSwitch reached: " + playerPresetName)
 +						if GTSPlugin.ProteusBeginSwitch(player, outgoingGTSActor, playerPresetName) == false
 +							Debug.Notification("GTS wrapper could not save the outgoing character. Character switch aborted.")
 +							player.GetActorBase().SetInvulnerable(False)
@@ -63,7 +69,7 @@
  						endIf
  					endIf
  
-@@ -5475,12 +5471,10 @@
+@@ -5475,12 +5477,12 @@
 -					;JSON is authoritative. On first encounter there may be no profile yet;
 -					;reset instead of inheriting the outgoing character's GTS state.
 +					;Load targetPresetName explicitly. The `target` actor has already been
@@ -72,6 +78,8 @@
 -						if GTSPlugin.ProteusProfileLoad(player, target) == false
 -							GTSPlugin.ProteusProfileResetNewCharacter(player)
 -							Debug.Notification("No GTS profile found for target character; initialized clean GTS state.")
++						Debug.Notification("[GTSWRAP] Papyrus FinishSwitch reached")
++						Debug.Trace("[GTSWRAP] Papyrus FinishSwitch reached: " + targetPresetName)
 +						if GTSPlugin.ProteusFinishSwitch(player, targetPresetName) == false
 +							Debug.Notification("GTS wrapper failed to initialize the incoming character. Check the GTS log.")
  						endIf

@@ -36,10 +36,38 @@ $pscHash = (Get-FileHash $pscPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($pscHash -ne 'd09a2b0fb9fa3440088b9575ee869d251efa9b7cdd97c99b1a7192b4ce05024b') {
     throw "Patched PSC hash mismatch: $pscHash"
 }
-Write-Host "Exact patched Player PSC verified: $pscHash"
+Write-Host "Exact patched Player PSC verified before compiler compatibility edits: $pscHash"
 Select-String -Path $pscPath -Pattern 'ProteusBeginNewCharacter|ProteusFinalizeNewCharacter|ProteusBeginSwitch|ProteusFinishSwitch' -Context 2,2
 
-# Proteus dependency sources are compile-time imports only; the Player PSC above is the exact uploaded version.
+# Caprica is stricter than the compiler used for the shipped Proteus PEX and
+# rejects two pre-existing local-variable shadowing cases. Rename only those
+# locals after verifying the exact uploaded-source hash; behavior is unchanged.
+$lines = [System.Collections.Generic.List[string]](Get-Content $pscPath)
+$expected = @{
+    5451 = 'int k = 0'
+    5453 = 'while k < loadedPresetCount'
+    5454 = 'if(value  == presetsLoaded[k])'
+    5457 = 'k+=1'
+    8317 = 'bool addThis = true'
+    8320 = 'addThis = false'
+    8326 = 'if addThis == true'
+}
+foreach ($lineNo in $expected.Keys) {
+    if ($lines[$lineNo - 1].Trim() -ne $expected[$lineNo]) {
+        throw "Unexpected exact PSC content at compiler-fix line $lineNo: '$($lines[$lineNo - 1].Trim())'"
+    }
+}
+$lines[5450] = $lines[5450].Replace('int k = 0', 'int dedupeIndex = 0')
+$lines[5452] = $lines[5452].Replace('while k < loadedPresetCount', 'while dedupeIndex < loadedPresetCount')
+$lines[5453] = $lines[5453].Replace('presetsLoaded[k]', 'presetsLoaded[dedupeIndex]')
+$lines[5456] = $lines[5456].Replace('k+=1', 'dedupeIndex+=1')
+$lines[8316] = $lines[8316].Replace('bool addThis = true', 'bool addOtherFollower = true')
+$lines[8319] = $lines[8319].Replace('addThis = false', 'addOtherFollower = false')
+$lines[8325] = $lines[8325].Replace('if addThis == true', 'if addOtherFollower == true')
+[IO.File]::WriteAllText($pscPath, (($lines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
+Write-Host 'Applied two semantics-preserving Caprica variable-shadowing fixes.'
+
+# Proteus dependency sources are compile-time imports only; the Player PSC above is the exact uploaded version plus the two compiler-only renames.
 git clone https://github.com/phenderix/PROTEUS.git deps\proteus
 if ($LASTEXITCODE -ne 0) { throw 'Proteus dependency clone failed' }
 Set-Location deps\proteus

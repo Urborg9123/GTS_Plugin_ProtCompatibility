@@ -47,6 +47,33 @@ namespace GTS {
 			}
 			return true;
 		}
+
+		void DumpSelectedActorStolenAttributes() {
+			auto selected = RE::Console::GetSelectedRef();
+			if (!selected) {
+				Cprint("getstolenatt: select an actor in the console first");
+				return;
+			}
+
+			auto* actor = selected->As<RE::Actor>();
+			if (!actor) {
+				Cprint("getstolenatt: selected reference {:08X} is not an Actor", selected->GetFormID());
+				return;
+			}
+
+			auto* persistent = Persistent::GetActorData(actor);
+			if (!persistent) {
+				Cprint("getstolenatt: no PersistentActorData for {} [{:08X}]", actor->GetName(), actor->GetFormID());
+				return;
+			}
+
+			Cprint("--- GTS stolen attributes ---");
+			Cprint("Actor: {} [{:08X}]", actor->GetName(), actor->GetFormID());
+			Cprint("fStolenAttibutes = {:.6f}", persistent->fStolenAttibutes);
+			Cprint("fStolenHealth = {:.6f}", persistent->fStolenHealth);
+			Cprint("fStolenMagicka = {:.6f}", persistent->fStolenMagicka);
+			Cprint("fStolenStamina = {:.6f}", persistent->fStolenStamina);
+		}
 	}
 
 	void ConsoleManager::RegisterCommand(std::string_view a_cmdName, const std::function<void()>& a_callback, const std::string& a_desc) {
@@ -72,6 +99,12 @@ namespace GTS {
 
 		while (Msg >> TmpArg) {
 			Args.emplace_back(TmpArg);
+		}
+
+		// Diagnostic shorthand: allow the requested bare command as well as "gts getstolenatt".
+		if (Args.size() == 1 && str_tolower(Args.at(0)) == "getstolenatt") {
+			DumpSelectedActorStolenAttributes();
+			return true;
 		}
 
 		if (Args.empty() || str_tolower(Args.at(0)) != Default_Preffix) {
@@ -206,6 +239,7 @@ namespace GTS {
 		RegisterCommand("help", CMD_Help, "Show this list");
 		RegisterCommand("version", CMD_Version, "Show plugin version");
 		RegisterCommand("unlimited", CMD_Unlimited, "Unlocks max size sliders");
+		RegisterCommand("getstolenatt", DumpSelectedActorStolenAttributes, "Show raw persistent stolen attributes for selected actor");
 
 		RegisterCommand("pdump", CMD_ProfileDump, "Dump selected actor/player GTS state; optional profile label");
 		RegisterCommand("psave", CMD_ProfileSave, "Save selected actor/player GTS state; optional profile name");

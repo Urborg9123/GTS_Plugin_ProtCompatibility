@@ -80,7 +80,7 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
-		logger::info(
+		logger::error(
 			"ProteusWrapper: ENTER BeginNewCharacter player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
@@ -116,7 +116,7 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool FinalizeNewCharacter(RE::Actor* player) {
-		logger::info(
+		logger::error(
 			"ProteusWrapper: ENTER FinalizeNewCharacter player={:08X}",
 			player ? player->GetFormID() : 0u);
 
@@ -166,7 +166,7 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
-		logger::info(
+		logger::error(
 			"ProteusWrapper: ENTER BeginSwitch player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
@@ -192,7 +192,7 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey) {
-		logger::info(
+		logger::error(
 			"ProteusWrapper: ENTER FinishSwitch player={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
 			incomingKey);

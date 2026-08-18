@@ -18,19 +18,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Apply native GTS Proteus patch
+      - name: Apply native GTS Proteus patches
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
 
-          git apply --check ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch check failed with exit code $LASTEXITCODE"
-          }
+          $patches = @(
+            'ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch',
+            'ProteusCompat/ProteusRecurringQuestScript_GTSWrapper.patch'
+          )
 
-          git apply ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch apply failed with exit code $LASTEXITCODE"
+          foreach ($patch in $patches) {
+            git apply --check $patch
+            if ($LASTEXITCODE -ne 0) {
+              throw "Proteus GTS patch check failed for $patch with exit code $LASTEXITCODE"
+            }
+
+            git apply $patch
+            if ($LASTEXITCODE -ne 0) {
+              throw "Proteus GTS patch apply failed for $patch with exit code $LASTEXITCODE"
+            }
           }
 
           git diff --check
@@ -38,7 +45,7 @@ jobs:
             throw "Patched Proteus source failed git diff --check"
           }
 
-          Write-Host 'Native GTS Proteus patch applied.'
+          Write-Host 'Native GTS Proteus patches applied.'
 
       - name: Download Caprica
         shell: pwsh

@@ -4,6 +4,8 @@
 
 #include <mutex>
 
+// Active Proteus Player-script wrapper build trigger.
+
 namespace GTS::ProteusWrapper {
 	namespace {
 		struct NewCharacterState {

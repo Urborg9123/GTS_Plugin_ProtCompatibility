@@ -25,6 +25,8 @@ Bool Function ProteusFinalizeNewCharacter(Actor akPlayer) global native
 Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinishSwitch(Actor akPlayer, String asIncomingKey) global native
 
+; Active Player-script wrapper CI trigger marker.
+
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native
 

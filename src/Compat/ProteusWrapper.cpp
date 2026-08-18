@@ -80,6 +80,12 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
+		logger::info(
+			"ProteusWrapper: ENTER BeginNewCharacter player={:08X} outgoing={:08X} key='{}'",
+			player ? player->GetFormID() : 0u,
+			outgoingActor ? outgoingActor->GetFormID() : 0u,
+			outgoingKey);
+
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: BeginNewCharacter rejected non-player actor");
 			return false;
@@ -110,6 +116,10 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool FinalizeNewCharacter(RE::Actor* player) {
+		logger::info(
+			"ProteusWrapper: ENTER FinalizeNewCharacter player={:08X}",
+			player ? player->GetFormID() : 0u);
+
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: FinalizeNewCharacter rejected non-player actor");
 			return false;
@@ -156,6 +166,12 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
+		logger::info(
+			"ProteusWrapper: ENTER BeginSwitch player={:08X} outgoing={:08X} key='{}'",
+			player ? player->GetFormID() : 0u,
+			outgoingActor ? outgoingActor->GetFormID() : 0u,
+			outgoingKey);
+
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: BeginSwitch rejected non-player actor");
 			return false;
@@ -176,6 +192,11 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey) {
+		logger::info(
+			"ProteusWrapper: ENTER FinishSwitch player={:08X} key='{}'",
+			player ? player->GetFormID() : 0u,
+			incomingKey);
+
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: FinishSwitch rejected non-player actor");
 			return false;
@@ -201,6 +222,9 @@ namespace GTS::ProteusWrapper {
 
 		std::scoped_lock lock(StateLock);
 		if (!NewCharacter.pending) {
+			logger::info(
+				"ProteusWrapper: RaceMenu {} observed with no pending New Character transaction",
+				event->opening ? "OPEN" : "CLOSE");
 			return;
 		}
 

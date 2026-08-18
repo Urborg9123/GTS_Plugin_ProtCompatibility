@@ -1,5 +1,6 @@
 #include "Papyrus/Plugin.hpp"
 #include "Compat/ProteusProfile.hpp"
+#include "Compat/ProteusWrapper.hpp"
 #include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
@@ -82,6 +83,22 @@ namespace {
 		GTS::ProteusProfile::ResetNewCharacter(player);
 	}
 
+	bool ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player, Actor* outgoingActor) {
+		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor);
+	}
+
+	bool ProteusFinalizeNewCharacter(StaticFunctionTag*, Actor* player) {
+		return GTS::ProteusWrapper::FinalizeNewCharacter(player);
+	}
+
+	bool ProteusBeginSwitch(StaticFunctionTag*, Actor* player, Actor* outgoingActor) {
+		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor);
+	}
+
+	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, Actor* incomingActor) {
+		return GTS::ProteusWrapper::FinishSwitch(player, incomingActor);
+	}
+
 	void ResetQuestProgression(StaticFunctionTag*) {
 		GTS::ResetQuest();
 	}
@@ -150,11 +167,18 @@ namespace GTS {
 		vm->RegisterFunction("GetTotalKills", PapyrusClass, GetTotalKills);
 		vm->RegisterFunction("SetTotalKills", PapyrusClass, SetTotalKills);
 
-		// Proteus compatibility: GTS owns the character profile; Proteus only
-		// supplies the stable inactive-character actor at switch boundaries.
+		// Legacy native Proteus profile bridge retained while the lifecycle
+		// wrapper is validated.
 		vm->RegisterFunction("ProteusProfileSave", PapyrusClass, ProteusProfileSave);
 		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
+
+		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence;
+		// Proteus actors are runtime cache/identity boundaries only.
+		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
+		vm->RegisterFunction("ProteusFinalizeNewCharacter", PapyrusClass, ProteusFinalizeNewCharacter);
+		vm->RegisterFunction("ProteusBeginSwitch", PapyrusClass, ProteusBeginSwitch);
+		vm->RegisterFunction("ProteusFinishSwitch", PapyrusClass, ProteusFinishSwitch);
 
 		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);

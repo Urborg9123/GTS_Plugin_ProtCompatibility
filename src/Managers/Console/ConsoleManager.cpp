@@ -249,8 +249,9 @@ namespace GTS {
 		// Manual profile/actor aliases used by the persistence test harness.
 		RegisterCommand("padump", CMD_ProfileDump, "Alias: dump selected actor/player GTS state");
 		RegisterCommand("pasave", CMD_ProfileSave, "Alias: save selected actor/player GTS state to named profile");
-		RegisterCommand("pareset", CMD_ProfileReset, "Alias: reset selected actor/player GTS progression state");
+		RegisterCommand("pareset", CMD_ProfileReset, "Alias: reset selected actor/player GTS state");
 		RegisterCommand("paload", CMD_ProfileLoad, "Alias: load named profile into selected actor/player");
 	}
 }
+
 

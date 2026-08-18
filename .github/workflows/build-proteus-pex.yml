@@ -165,18 +165,20 @@ jobs:
             throw "Caprica failed compiling ProteusRecurringQuestScript with exit code $LASTEXITCODE"
           }
 
-          Set-Location $repo
+          Set-Location "$repo\ProteusCompat\Headers"
 
           & "$repo\tools\Caprica.exe" `
             --game skyrim `
             --flags "$repo\build\TESV_Papyrus_Flags.flg" `
             --import "$repo\build\imports" `
             --output "$repo\build\out" `
-            "$repo\ProteusCompat\Headers\GTSPlugin.psc"
+            "GTSPlugin.psc"
 
           if ($LASTEXITCODE -ne 0) {
             throw "Caprica failed compiling GTSPlugin with exit code $LASTEXITCODE"
           }
+
+          Set-Location $repo
 
           $proteusPex = Get-ChildItem "$repo\build\out" -Recurse -Filter ProteusRecurringQuestScript.pex |
             Select-Object -First 1

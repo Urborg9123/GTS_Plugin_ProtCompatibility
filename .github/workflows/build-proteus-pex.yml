@@ -6,6 +6,10 @@ on:
     paths:
       - 'ProteusCompat/**'
       - '.github/workflows/build-proteus-pex.yml'
+  pull_request:
+    paths:
+      - 'ProteusCompat/**'
+      - '.github/workflows/build-proteus-pex.yml'
 
 permissions:
   contents: read

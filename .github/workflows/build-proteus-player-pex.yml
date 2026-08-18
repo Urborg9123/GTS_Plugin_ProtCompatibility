@@ -35,29 +35,88 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Proteus checkout failed" }
           Set-Location ..\..
 
-          $patches = @(
-            'ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch',
-            'ProteusCompat/ProteusRecurringQuestScript_GTSWrapper.patch'
-          )
+          $path = 'deps\proteus\PhenderixToolEditPlayerScript.psc'
+          $text = (Get-Content $path -Raw).Replace("`r`n", "`n")
 
-          New-Item -ItemType Directory -Force -Path build\playerpatch | Out-Null
-
-          foreach ($patch in $patches) {
-            $name = Split-Path $patch -Leaf
-            $out = "build/playerpatch/$name"
-            $text = Get-Content $patch -Raw
-            $text = $text.Replace('ProteusCompat/Source/ProteusRecurringQuestScript.psc', 'PhenderixToolEditPlayerScript.psc')
-            Set-Content -Path $out -Value $text -Encoding UTF8
-
-            Set-Location deps\proteus
-            git apply --recount --check "..\..\$out"
-            if ($LASTEXITCODE -ne 0) { throw "Player-script patch check failed for $patch" }
-            git apply --recount "..\..\$out"
-            if ($LASTEXITCODE -ne 0) { throw "Player-script patch apply failed for $patch" }
-            Set-Location ..\..
+          function Replace-Once([string]$source, [string]$needle, [string]$replacement, [string]$label) {
+            $first = $source.IndexOf($needle)
+            if ($first -lt 0) { throw "Anchor not found: $label" }
+            $second = $source.IndexOf($needle, $first + $needle.Length)
+            if ($second -ge 0) { throw "Anchor is not unique: $label" }
+            return $source.Substring(0, $first) + $replacement + $source.Substring($first + $needle.Length)
           }
 
-          Write-Host 'Patched PhenderixToolEditPlayerScript.psc successfully.'
+          $newBeginAnchor = "`t`tProteus_LoadCharacterSpawn(player, characterSavingName)`n`t`tUtility.Wait(0.1)"
+          $newBeginReplacement = @'
+		Proteus_LoadCharacterSpawn(player, characterSavingName)
+		Utility.Wait(0.1)
+
+		Debug.Notification("[GTSWRAP] PlayerScript BeginNewCharacter reached")
+		Debug.Trace("[GTSWRAP] PlayerScript BeginNewCharacter reached")
+		if Game.GetModByName("GTS.esp") != 255
+			Actor outgoingGTSActor = Proteus_GetSpawningActor(characterSavingName)
+			if GTSPlugin.ProteusBeginNewCharacter(player, outgoingGTSActor, characterSavingName) == false
+				Debug.Notification("GTS wrapper could not save the outgoing character. New character creation aborted.")
+				player.GetActorBase().SetInvulnerable(False)
+				return
+			endIf
+		endIf
+'@
+          $text = Replace-Once $text $newBeginAnchor $newBeginReplacement 'New Character begin'
+
+          $newFinalizeAnchor = "`t;save new character into the Proteus system"
+          $newFinalizeReplacement = @'
+	Debug.Notification("[GTSWRAP] PlayerScript FinalizeNewCharacter reached")
+	Debug.Trace("[GTSWRAP] PlayerScript FinalizeNewCharacter reached")
+	if Game.GetModByName("GTS.esp") != 255
+		if GTSPlugin.ProteusFinalizeNewCharacter(player) == false
+			Debug.Notification("GTS wrapper finalization failed. New character save aborted.")
+			player.GetActorBase().SetInvulnerable(False)
+			return
+		endIf
+	endIf
+
+	;save new character into the Proteus system
+'@
+          $text = Replace-Once $text $newFinalizeAnchor $newFinalizeReplacement 'New Character finalize'
+
+          $switchBeginAnchor = "`t`t`t`t`tProteus_LoadCharacterSpawn(target, playerPresetName)`n`t`t`t`t`tUtility.Wait(0.1)"
+          $switchBeginReplacement = @'
+					Proteus_LoadCharacterSpawn(target, playerPresetName)
+					Utility.Wait(0.1)
+
+					Debug.Notification("[GTSWRAP] PlayerScript BeginSwitch reached")
+					Debug.Trace("[GTSWRAP] PlayerScript BeginSwitch reached")
+					if Game.GetModByName("GTS.esp") != 255
+						Actor outgoingGTSActor = Proteus_GetSpawningActor(playerPresetName)
+						if GTSPlugin.ProteusBeginSwitch(player, outgoingGTSActor, playerPresetName) == false
+							Debug.Notification("GTS wrapper could not save the outgoing character. Character switch aborted.")
+							player.GetActorBase().SetInvulnerable(False)
+							return
+						endIf
+					endIf
+'@
+          $text = Replace-Once $text $switchBeginAnchor $switchBeginReplacement 'Switch begin'
+
+          $switchFinishAnchor = "`t`t`t`t`tProteus_LoadCharacter(player, targetPresetName)`n`t`t`t`t`tUtility.Wait(0.1)"
+          $switchFinishReplacement = @'
+					Proteus_LoadCharacter(player, targetPresetName)
+					Utility.Wait(0.1)
+
+					Debug.Notification("[GTSWRAP] PlayerScript FinishSwitch reached")
+					Debug.Trace("[GTSWRAP] PlayerScript FinishSwitch reached")
+					if Game.GetModByName("GTS.esp") != 255
+						if GTSPlugin.ProteusFinishSwitch(player, targetPresetName) == false
+							Debug.Notification("GTS wrapper failed to initialize the incoming character. Check the GTS log.")
+						endIf
+					endIf
+'@
+          $text = Replace-Once $text $switchFinishAnchor $switchFinishReplacement 'Switch finish'
+
+          Set-Content -Path $path -Value $text -Encoding UTF8 -NoNewline
+
+          Select-String -Path $path -Pattern '\[GTSWRAP\]|ProteusBeginNewCharacter|ProteusFinalizeNewCharacter|ProteusBeginSwitch|ProteusFinishSwitch' -Context 2,2
+          Write-Host 'Patched active PhenderixToolEditPlayerScript.psc successfully.'
 
       - name: Download Caprica
         shell: pwsh

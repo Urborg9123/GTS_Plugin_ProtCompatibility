@@ -33,12 +33,12 @@ jobs:
           )
 
           foreach ($patch in $patches) {
-            git apply --check $patch
+            git apply --recount --check $patch
             if ($LASTEXITCODE -ne 0) {
               throw "Proteus GTS patch check failed for $patch with exit code $LASTEXITCODE"
             }
 
-            git apply $patch
+            git apply --recount $patch
             if ($LASTEXITCODE -ne 0) {
               throw "Proteus GTS patch apply failed for $patch with exit code $LASTEXITCODE"
             }

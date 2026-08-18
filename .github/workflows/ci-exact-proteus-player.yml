@@ -1,0 +1,27 @@
+name: CI Exact Proteus Player PEX
+
+on:
+  pull_request:
+    branches:
+      - ci/exact-player-wrapper-base
+    paths:
+      - 'ProteusCompat/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v6
+      - name: Build exact Player PEX
+        shell: pwsh
+        run: ./ProteusCompat/CI/build-exact-player.ps1
+      - name: Upload exact Player wrapper artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Proteus-GTS-Exact-Player-Wrapper-Papyrus
+          path: artifact/
+          if-no-files-found: error

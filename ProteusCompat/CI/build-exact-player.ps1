@@ -54,7 +54,7 @@ $expected = @{
 }
 foreach ($lineNo in $expected.Keys) {
     if ($lines[$lineNo - 1].Trim() -ne $expected[$lineNo]) {
-        throw "Unexpected exact PSC content at compiler-fix line $lineNo: '$($lines[$lineNo - 1].Trim())'"
+        throw "Unexpected exact PSC content at compiler-fix line ${lineNo}: '$($lines[$lineNo - 1].Trim())'"
     }
 }
 $lines[5450] = $lines[5450].Replace('int k = 0', 'int dedupeIndex = 0')

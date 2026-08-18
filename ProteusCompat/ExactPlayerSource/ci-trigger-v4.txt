@@ -1,2 +1,3 @@
 Trigger exact Player PEX compile with Caprica compatibility renames.
 Synchronize after PR creation.
+Rerun after PowerShell parser fix.

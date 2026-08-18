@@ -1,2 +1,2 @@
 Trigger exact installed Proteus Player wrapper PEX compile.
-Synchronize PR after workflow base is fixed.
+Synchronize PR after default-branch CI dispatcher was added.

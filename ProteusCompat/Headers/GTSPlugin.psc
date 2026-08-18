@@ -17,12 +17,13 @@ Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global na
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
-; Proteus lifecycle wrapper. GTSCharacterProfile JSON is authoritative; the
-; inactive Proteus actor is only a runtime cache at character boundaries.
-Bool Function ProteusBeginNewCharacter(Actor akPlayer, Actor akOutgoingActor) global native
+; Proteus lifecycle wrapper. GTSCharacterProfile JSON is authoritative; Proteus
+; supplies the explicit preset key because its actor slots are repurposed during
+; a character swap and cannot safely identify the incoming character afterward.
+Bool Function ProteusBeginNewCharacter(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinalizeNewCharacter(Actor akPlayer) global native
-Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor) global native
-Bool Function ProteusFinishSwitch(Actor akPlayer, Actor akIncomingActor) global native
+Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
+Bool Function ProteusFinishSwitch(Actor akPlayer, String asIncomingKey) global native
 
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native

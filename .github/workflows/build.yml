@@ -7,6 +7,7 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'vcpkg.json'
+      - 'ProteusCompat/**'
       - '.github/workflows/build.yml'
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - 'CMakeLists.txt'
       - 'CMakePresets.json'
       - 'vcpkg.json'
+      - 'ProteusCompat/**'
       - '.github/workflows/build.yml'
   workflow_dispatch: {}
 concurrency:
@@ -65,6 +67,140 @@ jobs:
         with:
           configurePreset: config-release
           buildPreset: build-release
+
+      - name: Build active Proteus Player wrapper PEX
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $PWD.Path
+
+          git clone https://github.com/phenderix/PROTEUS.git deps\proteus
+          if ($LASTEXITCODE -ne 0) { throw 'Proteus clone failed' }
+          Set-Location deps\proteus
+          git checkout fed75f6f30395e15b3d67ea3789e93737c09277a
+          if ($LASTEXITCODE -ne 0) { throw 'Proteus checkout failed' }
+          Set-Location $repo
+
+          $path = 'deps\proteus\PhenderixToolEditPlayerScript.psc'
+          $text = (Get-Content $path -Raw).Replace("`r`n", "`n")
+
+          function Replace-Once([string]$source, [string]$needle, [string]$replacement, [string]$label) {
+            $first = $source.IndexOf($needle)
+            if ($first -lt 0) { throw "Anchor not found: $label" }
+            $second = $source.IndexOf($needle, $first + $needle.Length)
+            if ($second -ge 0) { throw "Anchor is not unique: $label" }
+            return $source.Substring(0, $first) + $replacement + $source.Substring($first + $needle.Length)
+          }
+
+          $newBeginAnchor = "`t`tProteus_LoadCharacterSpawn(player, characterSavingName)`n`t`tUtility.Wait(0.1)"
+          $newBeginReplacement = @'
+		Proteus_LoadCharacterSpawn(player, characterSavingName)
+		Utility.Wait(0.1)
+
+		Debug.Notification("[GTSWRAP] PlayerScript BeginNewCharacter reached")
+		Debug.Trace("[GTSWRAP] PlayerScript BeginNewCharacter reached")
+		if Game.GetModByName("GTS.esp") != 255
+			Actor outgoingGTSActor = Proteus_GetSpawningActor(characterSavingName)
+			if GTSPlugin.ProteusBeginNewCharacter(player, outgoingGTSActor, characterSavingName) == false
+				Debug.Notification("GTS wrapper could not save the outgoing character. New character creation aborted.")
+				player.GetActorBase().SetInvulnerable(False)
+				return
+			endIf
+		endIf
+'@
+          $text = Replace-Once $text $newBeginAnchor $newBeginReplacement 'New Character begin'
+
+          $newFinalizeAnchor = "`t;save new character into the Proteus system"
+          $newFinalizeReplacement = @'
+	Debug.Notification("[GTSWRAP] PlayerScript FinalizeNewCharacter reached")
+	Debug.Trace("[GTSWRAP] PlayerScript FinalizeNewCharacter reached")
+	if Game.GetModByName("GTS.esp") != 255
+		if GTSPlugin.ProteusFinalizeNewCharacter(player) == false
+			Debug.Notification("GTS wrapper finalization failed. New character save aborted.")
+			player.GetActorBase().SetInvulnerable(False)
+			return
+		endIf
+	endIf
+
+	;save new character into the Proteus system
+'@
+          $text = Replace-Once $text $newFinalizeAnchor $newFinalizeReplacement 'New Character finalize'
+
+          $switchBeginAnchor = "`t`t`t`t`tProteus_LoadCharacterSpawn(target, playerPresetName)`n`t`t`t`t`tUtility.Wait(0.1)"
+          $switchBeginReplacement = @'
+					Proteus_LoadCharacterSpawn(target, playerPresetName)
+					Utility.Wait(0.1)
+
+					Debug.Notification("[GTSWRAP] PlayerScript BeginSwitch reached")
+					Debug.Trace("[GTSWRAP] PlayerScript BeginSwitch reached")
+					if Game.GetModByName("GTS.esp") != 255
+						Actor outgoingGTSActor = Proteus_GetSpawningActor(playerPresetName)
+						if GTSPlugin.ProteusBeginSwitch(player, outgoingGTSActor, playerPresetName) == false
+							Debug.Notification("GTS wrapper could not save the outgoing character. Character switch aborted.")
+							player.GetActorBase().SetInvulnerable(False)
+							return
+						endIf
+					endIf
+'@
+          $text = Replace-Once $text $switchBeginAnchor $switchBeginReplacement 'Switch begin'
+
+          $switchFinishAnchor = "`t`t`t`t`tProteus_LoadCharacter(player, targetPresetName)`n`t`t`t`t`tUtility.Wait(0.1)"
+          $switchFinishReplacement = @'
+					Proteus_LoadCharacter(player, targetPresetName)
+					Utility.Wait(0.1)
+
+					Debug.Notification("[GTSWRAP] PlayerScript FinishSwitch reached")
+					Debug.Trace("[GTSWRAP] PlayerScript FinishSwitch reached")
+					if Game.GetModByName("GTS.esp") != 255
+						if GTSPlugin.ProteusFinishSwitch(player, targetPresetName) == false
+							Debug.Notification("GTS wrapper failed to initialize the incoming character. Check the GTS log.")
+						endIf
+					endIf
+'@
+          $text = Replace-Once $text $switchFinishAnchor $switchFinishReplacement 'Switch finish'
+
+          Set-Content -Path $path -Value $text -Encoding UTF8 -NoNewline
+          Select-String -Path $path -Pattern '\[GTSWRAP\]|ProteusBeginNewCharacter|ProteusFinalizeNewCharacter|ProteusBeginSwitch|ProteusFinishSwitch' -Context 1,1
+
+          Invoke-WebRequest -Uri 'https://github.com/Orvid/Caprica/releases/download/v0.3.0/Caprica.v0.3.0.7z' -OutFile caprica.7z
+          New-Item -ItemType Directory -Force -Path tools\caprica | Out-Null
+          & 'C:\Program Files\7-Zip\7z.exe' x caprica.7z '-otools\caprica' -y
+          if ($LASTEXITCODE -ne 0) { throw 'Caprica extraction failed' }
+          $caprica = Get-ChildItem tools\caprica -Recurse -Filter Caprica.exe | Select-Object -First 1
+          if (-not $caprica) { throw 'Caprica.exe not found' }
+          Copy-Item $caprica.FullName tools\Caprica.exe -Force
+
+          git clone --depth 1 https://github.com/Rukan/Grimy-Skyrim-Papyrus-Source.git deps\skyrim
+          if ($LASTEXITCODE -ne 0) { throw 'Skyrim Papyrus headers clone failed' }
+          New-Item -ItemType Directory -Force -Path build\papyrus-imports | Out-Null
+          Get-ChildItem deps\skyrim -Filter *.psc -File | Copy-Item -Destination build\papyrus-imports -Force
+          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File | Copy-Item -Destination build\papyrus-imports -Force
+          'Scriptname Container extends Form Hidden' | Set-Content build\papyrus-imports\Container.psc -Encoding ASCII
+          @('', '; SKSE64 light-plugin functions required by Proteus', 'int Function GetLightModCount() native global', 'string Function GetLightModName(int idx) native global') | Add-Content build\papyrus-imports\Game.psc -Encoding ASCII
+          @('// List of flags for TESV', '', 'Flag Hidden 0', '{', '    Script', '    Property', '}', '', 'Flag Conditional 1', '{', '    Script', '    Variable', '}') | Set-Content build\TESV_Papyrus_Flags.flg -Encoding ASCII
+
+          New-Item -ItemType Directory -Force -Path build\papyrus-out | Out-Null
+          Set-Location "$repo\deps\proteus"
+          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\papyrus-imports" --import "$repo\deps\proteus" --output "$repo\build\papyrus-out" "PhenderixToolEditPlayerScript.psc"
+          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling active Proteus Player script' }
+
+          Set-Location "$repo\ProteusCompat\Headers"
+          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\papyrus-imports" --output "$repo\build\papyrus-out" "GTSPlugin.psc"
+          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling GTSPlugin runtime script' }
+          Set-Location $repo
+
+          $playerPex = Get-ChildItem build\papyrus-out -Recurse -Filter PhenderixToolEditPlayerScript.pex | Select-Object -First 1
+          $gtsPex = Get-ChildItem build\papyrus-out -Recurse -Filter GTSPlugin.pex | Select-Object -First 1
+          if (-not $playerPex) { throw 'PhenderixToolEditPlayerScript.pex was not produced' }
+          if (-not $gtsPex) { throw 'GTSPlugin.pex was not produced' }
+
+          $package = Get-ChildItem distribution -Directory -Filter 'Package-*' | Select-Object -First 1
+          if (-not $package) { throw 'Distribution package directory not found' }
+          New-Item -ItemType Directory -Force -Path "$($package.FullName)\Scripts" | Out-Null
+          Copy-Item $playerPex.FullName "$($package.FullName)\Scripts\PhenderixToolEditPlayerScript.pex" -Force
+          Copy-Item $gtsPex.FullName "$($package.FullName)\Scripts\GTSPlugin.pex" -Force
+          Write-Host "Bundled Player PEX: $($playerPex.FullName)"
+          Write-Host "Bundled GTS PEX: $($gtsPex.FullName)"
 
       - name: Upload Distribution Package
         uses: actions/upload-artifact@v4

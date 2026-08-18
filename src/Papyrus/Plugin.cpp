@@ -83,20 +83,20 @@ namespace {
 		GTS::ProteusProfile::ResetNewCharacter(player);
 	}
 
-	bool ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player, Actor* outgoingActor) {
-		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor);
+	bool ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor, outgoingKey);
 	}
 
 	bool ProteusFinalizeNewCharacter(StaticFunctionTag*, Actor* player) {
 		return GTS::ProteusWrapper::FinalizeNewCharacter(player);
 	}
 
-	bool ProteusBeginSwitch(StaticFunctionTag*, Actor* player, Actor* outgoingActor) {
-		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor);
+	bool ProteusBeginSwitch(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor, outgoingKey);
 	}
 
-	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, Actor* incomingActor) {
-		return GTS::ProteusWrapper::FinishSwitch(player, incomingActor);
+	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, std::string incomingKey) {
+		return GTS::ProteusWrapper::FinishSwitch(player, incomingKey);
 	}
 
 	void ResetQuestProgression(StaticFunctionTag*) {
@@ -174,7 +174,7 @@ namespace GTS {
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
 
 		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence;
-		// Proteus actors are runtime cache/identity boundaries only.
+		// Proteus supplies explicit preset keys at the swap boundaries.
 		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
 		vm->RegisterFunction("ProteusFinalizeNewCharacter", PapyrusClass, ProteusFinalizeNewCharacter);
 		vm->RegisterFunction("ProteusBeginSwitch", PapyrusClass, ProteusBeginSwitch);

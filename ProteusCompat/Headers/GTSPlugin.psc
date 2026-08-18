@@ -11,11 +11,18 @@ Bool function WasDragonEaten() global native
 Int Function GetTotalKills(Actor akActor) global native
 Function SetTotalKills(Actor akActor, Int aiCount) global native
 
-; Native Proteus character profiles. The stable Proteus NPC identifies the
-; character; GTS owns the durable JSON profile and runtime transfer.
+; Legacy native Proteus profile bridge retained for compatibility while the
+; lifecycle wrapper is tested.
 Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global native
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
+
+; Proteus lifecycle wrapper. GTSCharacterProfile JSON is authoritative; the
+; inactive Proteus actor is only a runtime cache at character boundaries.
+Bool Function ProteusBeginNewCharacter(Actor akPlayer, Actor akOutgoingActor) global native
+Bool Function ProteusFinalizeNewCharacter(Actor akPlayer) global native
+Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor) global native
+Bool Function ProteusFinishSwitch(Actor akPlayer, Actor akIncomingActor) global native
 
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native

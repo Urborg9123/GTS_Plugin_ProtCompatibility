@@ -12,7 +12,7 @@
 -					player.GetActorBase().SetInvulnerable(False)
 -					return
 -				endIf
-+			if GTSPlugin.ProteusBeginNewCharacter(player, outgoingGTSActor) == false
++			if GTSPlugin.ProteusBeginNewCharacter(player, outgoingGTSActor, characterSavingName) == false
 +				Debug.Notification("GTS wrapper could not save the outgoing character. New character creation aborted.")
 +				player.GetActorBase().SetInvulnerable(False)
 +				return
@@ -56,7 +56,7 @@
 -								player.GetActorBase().SetInvulnerable(False)
 -								return
 -							endIf
-+						if GTSPlugin.ProteusBeginSwitch(player, outgoingGTSActor) == false
++						if GTSPlugin.ProteusBeginSwitch(player, outgoingGTSActor, playerPresetName) == false
 +							Debug.Notification("GTS wrapper could not save the outgoing character. Character switch aborted.")
 +							player.GetActorBase().SetInvulnerable(False)
 +							return
@@ -66,13 +66,13 @@
 @@ -5475,12 +5471,10 @@
 -					;JSON is authoritative. On first encounter there may be no profile yet;
 -					;reset instead of inheriting the outgoing character's GTS state.
-+					;Load the incoming character's canonical GTS profile. The wrapper
-+					;initializes a clean profile when this character has no JSON yet.
++					;Load targetPresetName explicitly. The `target` actor has already been
++					;repurposed to hold the outgoing character at this point in the swap.
  					if Game.GetModByName("GTS.esp") != 255
 -						if GTSPlugin.ProteusProfileLoad(player, target) == false
 -							GTSPlugin.ProteusProfileResetNewCharacter(player)
 -							Debug.Notification("No GTS profile found for target character; initialized clean GTS state.")
-+						if GTSPlugin.ProteusFinishSwitch(player, target) == false
++						if GTSPlugin.ProteusFinishSwitch(player, targetPresetName) == false
 +							Debug.Notification("GTS wrapper failed to initialize the incoming character. Check the GTS log.")
  						endIf
  					endIf

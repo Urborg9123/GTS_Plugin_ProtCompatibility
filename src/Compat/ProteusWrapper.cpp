@@ -39,6 +39,11 @@ namespace GTS::ProteusWrapper {
 		}
 
 		bool SaveOutgoing(RE::Actor* player, RE::Actor* outgoingActor, std::string_view key) {
+			if (key.empty()) {
+				logger::error("ProteusWrapper: refused outgoing save with empty Proteus preset key");
+				return false;
+			}
+
 			if (!GTS::CharacterProfile::Save(player, key)) {
 				logger::error("ProteusWrapper: canonical save failed for outgoing key='{}'", key);
 				return false;
@@ -55,13 +60,13 @@ namespace GTS::ProteusWrapper {
 		}
 
 		bool InitializeFresh(RE::Actor* player, std::string_view key) {
-			if (!GTS::CharacterProfile::Reset(player)) {
-				logger::error("ProteusWrapper: failed to reset Player for fresh key='{}'", key);
+			if (key.empty()) {
+				logger::error("ProteusWrapper: refused fresh profile with empty Proteus preset key");
 				return false;
 			}
 
-			if (key.empty()) {
-				logger::error("ProteusWrapper: fresh Player reset completed but character key is empty");
+			if (!GTS::CharacterProfile::Reset(player)) {
+				logger::error("ProteusWrapper: failed to reset Player for fresh key='{}'", key);
 				return false;
 			}
 
@@ -74,19 +79,17 @@ namespace GTS::ProteusWrapper {
 		}
 	}
 
-	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor) {
+	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: BeginNewCharacter rejected non-player actor");
 			return false;
 		}
-
-		const auto oldKey = ActorKey(player);
-		if (oldKey.empty()) {
-			logger::error("ProteusWrapper: BeginNewCharacter could not resolve outgoing character name");
+		if (outgoingKey.empty()) {
+			logger::error("ProteusWrapper: BeginNewCharacter received empty outgoing preset key");
 			return false;
 		}
 
-		if (!SaveOutgoing(player, outgoingActor, oldKey)) {
+		if (!SaveOutgoing(player, outgoingActor, outgoingKey)) {
 			return false;
 		}
 
@@ -95,12 +98,12 @@ namespace GTS::ProteusWrapper {
 			NewCharacter.pending = true;
 			NewCharacter.raceMenuOpened = false;
 			NewCharacter.raceMenuClosed = false;
-			NewCharacter.oldKey = oldKey;
+			NewCharacter.oldKey = std::string(outgoingKey);
 		}
 
 		logger::info(
 			"ProteusWrapper: New Character armed outgoing='{}' player={:08X} inactive={:08X}",
-			oldKey,
+			outgoingKey,
 			player->GetFormID(),
 			outgoingActor ? outgoingActor->GetFormID() : 0u);
 		return true;
@@ -138,7 +141,7 @@ namespace GTS::ProteusWrapper {
 
 		if (newKey == state.oldKey) {
 			logger::error(
-				"ProteusWrapper: New Character kept the outgoing name '{}'; refusing to overwrite its canonical GTS profile",
+				"ProteusWrapper: New Character kept the outgoing preset key '{}'; refusing to overwrite its canonical GTS profile",
 				newKey);
 			return false;
 		}
@@ -152,47 +155,43 @@ namespace GTS::ProteusWrapper {
 		return ok;
 	}
 
-	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor) {
+	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
 		if (!IsPlayer(player)) {
 			logger::error("ProteusWrapper: BeginSwitch rejected non-player actor");
 			return false;
 		}
-
-		const auto key = ActorKey(player);
-		if (key.empty()) {
-			logger::error("ProteusWrapper: BeginSwitch could not resolve outgoing character name");
+		if (outgoingKey.empty()) {
+			logger::error("ProteusWrapper: BeginSwitch received empty outgoing preset key");
 			return false;
 		}
 
-		const bool ok = SaveOutgoing(player, outgoingActor, key);
+		const bool ok = SaveOutgoing(player, outgoingActor, outgoingKey);
 		if (ok) {
 			logger::info(
 				"ProteusWrapper: saved outgoing switch character key='{}' inactive={:08X}",
-				key,
+				outgoingKey,
 				outgoingActor ? outgoingActor->GetFormID() : 0u);
 		}
 		return ok;
 	}
 
-	bool FinishSwitch(RE::Actor* player, RE::Actor* incomingActor) {
-		if (!IsPlayer(player) || !incomingActor) {
-			logger::error("ProteusWrapper: FinishSwitch rejected invalid player/incoming actor");
+	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey) {
+		if (!IsPlayer(player)) {
+			logger::error("ProteusWrapper: FinishSwitch rejected non-player actor");
+			return false;
+		}
+		if (incomingKey.empty()) {
+			logger::error("ProteusWrapper: FinishSwitch received empty incoming preset key");
 			return false;
 		}
 
-		const auto key = ActorKey(incomingActor);
-		if (key.empty()) {
-			logger::error("ProteusWrapper: FinishSwitch could not resolve incoming character name");
-			return false;
-		}
-
-		if (GTS::CharacterProfile::Load(player, key)) {
-			logger::info("ProteusWrapper: loaded incoming switch character key='{}'", key);
+		if (GTS::CharacterProfile::Load(player, incomingKey)) {
+			logger::info("ProteusWrapper: loaded incoming switch character key='{}'", incomingKey);
 			return true;
 		}
 
-		logger::warn("ProteusWrapper: no canonical profile for incoming key='{}'; initializing clean GTS state", key);
-		return InitializeFresh(player, key);
+		logger::warn("ProteusWrapper: no canonical profile for incoming key='{}'; initializing clean GTS state", incomingKey);
+		return InitializeFresh(player, incomingKey);
 	}
 
 	void HandleMenuOpenClose(const RE::MenuOpenCloseEvent* event) {

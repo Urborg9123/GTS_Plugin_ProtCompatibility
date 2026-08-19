@@ -1,0 +1,57 @@
+diff --git a/src/Utils/Actor/GTSUtils.cpp b/src/Utils/Actor/GTSUtils.cpp
+--- a/src/Utils/Actor/GTSUtils.cpp
++++ b/src/Utils/Actor/GTSUtils.cpp
+@@
+ 	float GetStolenAttributes_Values(Actor* giant, ActorValue type) {
+-		if (giant->IsPlayerRef()) {
+-			auto Persistent = Persistent::GetActorData(giant);
+-			if (Persistent) {
+-				float max = GetStolenAttributeCap(giant);
+-				if (type == ActorValue::kHealth) {
+-					return std::min(Persistent->fStolenHealth, max);
+-				} else if (type == ActorValue::kMagicka) {
+-					return std::min(Persistent->fStolenMagicka, max);
+-				} else if (type == ActorValue::kStamina) {
+-					return std::min(Persistent->fStolenStamina, max);
+-				} else {
+-					return 0.0f;
+-				}
+-			}
+-			return 0.0f;
++		if (!giant) {
++			return 0.0f;
++		}
++
++		auto Persistent = Persistent::GetActorData(giant);
++		if (Persistent) {
++			const float max = GetStolenAttributeCap(giant);
++			const float multiplier = giant->IsPlayerRef() ? 1.0f : 100.0f;
++			if (type == ActorValue::kHealth) {
++				return std::min(Persistent->fStolenHealth, max) * multiplier;
++			} else if (type == ActorValue::kMagicka) {
++				return std::min(Persistent->fStolenMagicka, max) * multiplier;
++			} else if (type == ActorValue::kStamina) {
++				return std::min(Persistent->fStolenStamina, max) * multiplier;
++			}
+ 		}
+ 		return 0.0f;
+ 	}
+diff --git a/src/Managers/AttributeManager.cpp b/src/Managers/AttributeManager.cpp
+--- a/src/Managers/AttributeManager.cpp
++++ b/src/Managers/AttributeManager.cpp
+@@
+ 		const float cap = GetStolenAttributeCap(actor);
++		constexpr float kNpcStolenAttributeMultiplier = 100.0f;
+ 		switch (av) {
+ 			case ActorValue::kHealth:
+-				return std::min(persistent->fStolenHealth, cap);
++				return std::min(persistent->fStolenHealth, cap) * kNpcStolenAttributeMultiplier;
+ 			case ActorValue::kMagicka:
+-				return std::min(persistent->fStolenMagicka, cap);
++				return std::min(persistent->fStolenMagicka, cap) * kNpcStolenAttributeMultiplier;
+ 			case ActorValue::kStamina:
+-				return std::min(persistent->fStolenStamina, cap);
++				return std::min(persistent->fStolenStamina, cap) * kNpcStolenAttributeMultiplier;
+ 			default:
+ 				return 0.0f;
+ 		}

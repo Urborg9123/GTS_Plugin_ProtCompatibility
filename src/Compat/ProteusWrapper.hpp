@@ -23,9 +23,9 @@ namespace GTS::ProteusWrapper {
 	bool PrepareSwitch(RE::Actor* player, std::string_view outgoingKey);
 
 	// New switch phase 2. Called only after Proteus has spawned/loaded the outgoing
-	// character into its inactive actor slot. Hydrate that resolved actor from the
-	// canonical outgoing JSON profile.
-	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor, std::string_view outgoingKey);
+	// character into its inactive actor slot. The canonical key comes from the
+	// pending PrepareSwitch transaction, not from Papyrus.
+	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor);
 
 	// Character switch phase 3: load the incoming profile into Player after Proteus
 	// has finished loading that character. Missing JSON initializes a clean profile.

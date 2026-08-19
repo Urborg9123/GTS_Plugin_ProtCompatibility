@@ -1,2 +1,3 @@
 CI-only marker for save/reset-before-Proteus switch build.
 Synchronize PR workflow.
+Trigger default-branch dispatcher.

@@ -227,43 +227,32 @@ namespace GTS::ProteusWrapper {
 		return true;
 	}
 
-	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor, std::string_view outgoingKey) {
-		logger::error(
-			"ProteusWrapper: ENTER RestoreOutgoingSwitchActor actor={:08X} key='{}'",
-			outgoingActor ? outgoingActor->GetFormID() : 0u,
-			outgoingKey);
-
-		if (!outgoingActor || IsPlayer(outgoingActor)) {
-			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor rejected invalid/player actor");
-			return false;
-		}
-		if (outgoingKey.empty()) {
-			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor received empty outgoing key");
-			return false;
-		}
-
+	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor) {
 		SwitchState state;
 		{
 			std::scoped_lock lock(StateLock);
 			state = Switch;
 		}
-		if (!state.pending) {
-			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor called without pending switch");
+
+		logger::error(
+			"ProteusWrapper: ENTER RestoreOutgoingSwitchActor actor={:08X} preparedKey='{}'",
+			outgoingActor ? outgoingActor->GetFormID() : 0u,
+			state.outgoingKey);
+
+		if (!outgoingActor || IsPlayer(outgoingActor)) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor rejected invalid/player actor");
 			return false;
 		}
-		if (state.outgoingKey != outgoingKey) {
-			logger::error(
-				"ProteusWrapper: outgoing restore key mismatch prepared='{}' requested='{}'",
-				state.outgoingKey,
-				outgoingKey);
+		if (!state.pending || state.outgoingKey.empty()) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor called without valid pending switch");
 			return false;
 		}
 
-		if (!GTS::CharacterProfile::Load(outgoingActor, outgoingKey)) {
+		if (!GTS::CharacterProfile::Load(outgoingActor, state.outgoingKey)) {
 			logger::error(
 				"ProteusWrapper: failed hydrating outgoing inactive actor {:08X} key='{}'",
 				outgoingActor->GetFormID(),
-				outgoingKey);
+				state.outgoingKey);
 			return false;
 		}
 
@@ -274,7 +263,7 @@ namespace GTS::ProteusWrapper {
 		logger::error(
 			"ProteusWrapper: RESTORED outgoing inactive actor {:08X} key='{}'",
 			outgoingActor->GetFormID(),
-			outgoingKey);
+			state.outgoingKey);
 		return true;
 	}
 

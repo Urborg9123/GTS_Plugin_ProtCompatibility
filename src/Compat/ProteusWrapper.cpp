@@ -4,12 +4,11 @@
 
 #include <mutex>
 
-// Active Proteus Player-script wrapper build trigger.
-
 namespace GTS::ProteusWrapper {
 	namespace {
 		struct NewCharacterState {
 			bool pending = false;
+			bool outgoingActorRestored = false;
 			bool raceMenuOpened = false;
 			bool raceMenuClosed = false;
 			std::string oldKey;
@@ -68,6 +67,25 @@ namespace GTS::ProteusWrapper {
 			return true;
 		}
 
+		bool SaveAndResetPlayer(RE::Actor* player, std::string_view key, std::string_view flow) {
+			if (key.empty()) {
+				logger::error("ProteusWrapper: {} refused empty outgoing preset key", flow);
+				return false;
+			}
+
+			if (!GTS::CharacterProfile::Save(player, key)) {
+				logger::error("ProteusWrapper: {} failed saving outgoing key='{}'", flow, key);
+				return false;
+			}
+
+			if (!GTS::CharacterProfile::Reset(player)) {
+				logger::error("ProteusWrapper: {} saved '{}' but failed resetting Player", flow, key);
+				return false;
+			}
+
+			return true;
+		}
+
 		bool InitializeFresh(RE::Actor* player, std::string_view key) {
 			if (key.empty()) {
 				logger::error("ProteusWrapper: refused fresh profile with empty Proteus preset key");
@@ -89,8 +107,10 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
+		// Legacy entry retained for older test PEX builds. The validated replacement
+		// is PrepareNewCharacter -> RestoreOutgoingNewCharacterActor -> Finalize.
 		logger::error(
-			"ProteusWrapper: ENTER BeginNewCharacter player={:08X} outgoing={:08X} key='{}'",
+			"ProteusWrapper: ENTER BeginNewCharacter(legacy) player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
 			outgoingKey);
@@ -111,16 +131,82 @@ namespace GTS::ProteusWrapper {
 		{
 			std::scoped_lock lock(StateLock);
 			NewCharacter.pending = true;
+			NewCharacter.outgoingActorRestored = outgoingActor != nullptr;
 			NewCharacter.raceMenuOpened = false;
 			NewCharacter.raceMenuClosed = false;
 			NewCharacter.oldKey = std::string(outgoingKey);
 		}
 
-		logger::info(
-			"ProteusWrapper: New Character armed outgoing='{}' player={:08X} inactive={:08X}",
-			outgoingKey,
-			player->GetFormID(),
-			outgoingActor ? outgoingActor->GetFormID() : 0u);
+		return true;
+	}
+
+	bool PrepareNewCharacter(RE::Actor* player, std::string_view outgoingKey) {
+		logger::error(
+			"ProteusWrapper: ENTER PrepareNewCharacter player={:08X} key='{}'",
+			player ? player->GetFormID() : 0u,
+			outgoingKey);
+
+		if (!IsPlayer(player)) {
+			logger::error("ProteusWrapper: PrepareNewCharacter rejected non-player actor");
+			return false;
+		}
+
+		// Snapshot the outgoing character while Player 0x14 still unequivocally
+		// represents it, then clear GTS character state before Proteus serializes it.
+		if (!SaveAndResetPlayer(player, outgoingKey, "PrepareNewCharacter")) {
+			return false;
+		}
+
+		{
+			std::scoped_lock lock(StateLock);
+			NewCharacter.pending = true;
+			NewCharacter.outgoingActorRestored = false;
+			NewCharacter.raceMenuOpened = false;
+			NewCharacter.raceMenuClosed = false;
+			NewCharacter.oldKey = std::string(outgoingKey);
+		}
+
+		logger::error("ProteusWrapper: NEWCHAR PREPARED outgoing='{}' saved=true reset=true", outgoingKey);
+		return true;
+	}
+
+	bool RestoreOutgoingNewCharacterActor(RE::Actor* outgoingActor) {
+		NewCharacterState state;
+		{
+			std::scoped_lock lock(StateLock);
+			state = NewCharacter;
+		}
+
+		logger::error(
+			"ProteusWrapper: ENTER RestoreOutgoingNewCharacterActor actor={:08X} preparedKey='{}'",
+			outgoingActor ? outgoingActor->GetFormID() : 0u,
+			state.oldKey);
+
+		if (!outgoingActor || IsPlayer(outgoingActor)) {
+			logger::error("ProteusWrapper: RestoreOutgoingNewCharacterActor rejected invalid/player actor");
+			return false;
+		}
+		if (!state.pending || state.oldKey.empty()) {
+			logger::error("ProteusWrapper: RestoreOutgoingNewCharacterActor called without valid pending transaction");
+			return false;
+		}
+
+		if (!GTS::CharacterProfile::Load(outgoingActor, state.oldKey)) {
+			logger::error(
+				"ProteusWrapper: failed hydrating New Character outgoing actor {:08X} key='{}'",
+				outgoingActor->GetFormID(),
+				state.oldKey);
+			return false;
+		}
+
+		{
+			std::scoped_lock lock(StateLock);
+			NewCharacter.outgoingActorRestored = true;
+		}
+		logger::error(
+			"ProteusWrapper: NEWCHAR RESTORED outgoing inactive actor {:08X} key='{}'",
+			outgoingActor->GetFormID(),
+			state.oldKey);
 		return true;
 	}
 
@@ -160,7 +246,7 @@ namespace GTS::ProteusWrapper {
 
 		if (newKey == state.oldKey) {
 			logger::error(
-				"ProteusWrapper: New Character kept the outgoing preset key '{}'; refusing to overwrite its canonical GTS profile",
+				"ProteusWrapper: New Character kept outgoing preset key '{}'; refusing to overwrite its canonical GTS profile",
 				newKey);
 			return false;
 		}
@@ -169,14 +255,16 @@ namespace GTS::ProteusWrapper {
 		if (ok) {
 			std::scoped_lock lock(StateLock);
 			NewCharacter = {};
-			logger::info("ProteusWrapper: New Character finalized '{}' -> '{}'", state.oldKey, newKey);
+			logger::error(
+				"ProteusWrapper: NEWCHAR FINISHED outgoing='{}' outgoingActorRestored={} incoming='{}'",
+				state.oldKey,
+				state.outgoingActorRestored,
+				newKey);
 		}
 		return ok;
 	}
 
 	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
-		// Legacy test entry retained so older PEX builds still bind. The new switch
-		// path uses PrepareSwitch before Proteus starts and never trusts `target`.
 		logger::error(
 			"ProteusWrapper: ENTER BeginSwitch(legacy) player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
@@ -195,24 +283,8 @@ namespace GTS::ProteusWrapper {
 			logger::error("ProteusWrapper: PrepareSwitch rejected non-player actor");
 			return false;
 		}
-		if (outgoingKey.empty()) {
-			logger::error("ProteusWrapper: PrepareSwitch received empty outgoing key");
-			return false;
-		}
 
-		// Phase 1: snapshot the live outgoing character while Player 0x14 still
-		// unequivocally represents that character.
-		if (!GTS::CharacterProfile::Save(player, outgoingKey)) {
-			logger::error("ProteusWrapper: PrepareSwitch failed saving outgoing key='{}'", outgoingKey);
-			return false;
-		}
-
-		// Then clear character-owned GTS state BEFORE Proteus serializes/spawns the
-		// outgoing character. This prevents GTS progression attached to Player 0x14
-		// from being baked into Proteus's own character data or bleeding into the
-		// incoming character during the swap.
-		if (!GTS::CharacterProfile::Reset(player)) {
-			logger::error("ProteusWrapper: PrepareSwitch saved '{}' but failed resetting Player", outgoingKey);
+		if (!SaveAndResetPlayer(player, outgoingKey, "PrepareSwitch")) {
 			return false;
 		}
 
@@ -339,7 +411,7 @@ namespace GTS::ProteusWrapper {
 	void Reset() {
 		std::scoped_lock lock(StateLock);
 		if (NewCharacter.pending) {
-			logger::info("ProteusWrapper: clearing pending New Character transaction");
+			logger::info("ProteusWrapper: clearing pending New Character transaction outgoing='{}'", NewCharacter.oldKey);
 		}
 		if (Switch.pending) {
 			logger::info("ProteusWrapper: clearing pending Switch transaction outgoing='{}'", Switch.outgoingKey);

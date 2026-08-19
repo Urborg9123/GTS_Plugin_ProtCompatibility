@@ -99,8 +99,9 @@ namespace {
 		return GTS::ProteusWrapper::PrepareSwitch(player, outgoingKey);
 	}
 
-	bool ProteusRestoreOutgoingSwitchActor(StaticFunctionTag*, Actor* outgoingActor, std::string outgoingKey) {
-		return GTS::ProteusWrapper::RestoreOutgoingSwitchActor(outgoingActor, outgoingKey);
+	bool ProteusRestoreOutgoingSwitchActor(StaticFunctionTag*, Actor* outgoingActor, std::string diagnosticKey) {
+		(void)diagnosticKey;
+		return GTS::ProteusWrapper::RestoreOutgoingSwitchActor(outgoingActor);
 	}
 
 	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, std::string incomingKey) {

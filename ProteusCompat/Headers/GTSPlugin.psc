@@ -17,22 +17,24 @@ Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global na
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
-; Proteus lifecycle wrapper.
+; Legacy New Character entry retained for older test PEX builds.
 Bool Function ProteusBeginNewCharacter(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
+
+; Three-phase New Character path:
+; 1) save+reset Player before Proteus saves the old character,
+; 2) hydrate the explicitly resolved old inactive actor after Proteus spawns it,
+; 3) finalize a clean profile after RaceMenu/startup and before Proteus saves new character.
+Bool Function ProteusPrepareNewCharacter(Actor akPlayer, String asOutgoingKey) global native
+Bool Function ProteusRestoreOutgoingNewCharacterActor(Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinalizeNewCharacter(Actor akPlayer) global native
 
 ; Legacy switch entry retained for older test PEX builds.
 Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
 
-; Three-phase switch path:
-; 1) save+reset Player before Proteus begins its own switch workflow,
-; 2) hydrate the explicitly resolved outgoing inactive actor after Proteus spawns it,
-; 3) restore the incoming Player profile after Proteus finishes loading it.
+; Three-phase switch path.
 Bool Function ProteusPrepareSwitch(Actor akPlayer, String asOutgoingKey) global native
 Bool Function ProteusRestoreOutgoingSwitchActor(Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinishSwitch(Actor akPlayer, String asIncomingKey) global native
-
-; Active Player-script wrapper CI trigger marker.
 
 ; Devourment Compatibility
 Function CallDevourmentCompatibility(Actor akPred, Actor akPrey, bool Digested) global native

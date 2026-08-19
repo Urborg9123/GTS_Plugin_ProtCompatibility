@@ -15,8 +15,15 @@ namespace GTS::ProteusWrapper {
 			std::string oldKey;
 		};
 
+		struct SwitchState {
+			bool pending = false;
+			bool outgoingActorRestored = false;
+			std::string outgoingKey;
+		};
+
 		std::mutex StateLock;
 		NewCharacterState NewCharacter;
+		SwitchState Switch;
 
 		bool IsPlayer(RE::Actor* actor) {
 			return actor && actor == RE::PlayerCharacter::GetSingleton();
@@ -168,29 +175,107 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
+		// Legacy test entry retained so older PEX builds still bind. The new switch
+		// path uses PrepareSwitch before Proteus starts and never trusts `target`.
 		logger::error(
-			"ProteusWrapper: ENTER BeginSwitch player={:08X} outgoing={:08X} key='{}'",
+			"ProteusWrapper: ENTER BeginSwitch(legacy) player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
 			outgoingKey);
+		return SaveOutgoing(player, outgoingActor, outgoingKey);
+	}
+
+	bool PrepareSwitch(RE::Actor* player, std::string_view outgoingKey) {
+		logger::error(
+			"ProteusWrapper: ENTER PrepareSwitch player={:08X} key='{}'",
+			player ? player->GetFormID() : 0u,
+			outgoingKey);
 
 		if (!IsPlayer(player)) {
-			logger::error("ProteusWrapper: BeginSwitch rejected non-player actor");
+			logger::error("ProteusWrapper: PrepareSwitch rejected non-player actor");
 			return false;
 		}
 		if (outgoingKey.empty()) {
-			logger::error("ProteusWrapper: BeginSwitch received empty outgoing preset key");
+			logger::error("ProteusWrapper: PrepareSwitch received empty outgoing key");
 			return false;
 		}
 
-		const bool ok = SaveOutgoing(player, outgoingActor, outgoingKey);
-		if (ok) {
-			logger::info(
-				"ProteusWrapper: saved outgoing switch character key='{}' inactive={:08X}",
-				outgoingKey,
-				outgoingActor ? outgoingActor->GetFormID() : 0u);
+		// Phase 1: snapshot the live outgoing character while Player 0x14 still
+		// unequivocally represents that character.
+		if (!GTS::CharacterProfile::Save(player, outgoingKey)) {
+			logger::error("ProteusWrapper: PrepareSwitch failed saving outgoing key='{}'", outgoingKey);
+			return false;
 		}
-		return ok;
+
+		// Then clear character-owned GTS state BEFORE Proteus serializes/spawns the
+		// outgoing character. This prevents GTS progression attached to Player 0x14
+		// from being baked into Proteus's own character data or bleeding into the
+		// incoming character during the swap.
+		if (!GTS::CharacterProfile::Reset(player)) {
+			logger::error("ProteusWrapper: PrepareSwitch saved '{}' but failed resetting Player", outgoingKey);
+			return false;
+		}
+
+		{
+			std::scoped_lock lock(StateLock);
+			Switch.pending = true;
+			Switch.outgoingActorRestored = false;
+			Switch.outgoingKey = std::string(outgoingKey);
+		}
+
+		logger::error("ProteusWrapper: PREPARED outgoing='{}' saved=true reset=true", outgoingKey);
+		return true;
+	}
+
+	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor, std::string_view outgoingKey) {
+		logger::error(
+			"ProteusWrapper: ENTER RestoreOutgoingSwitchActor actor={:08X} key='{}'",
+			outgoingActor ? outgoingActor->GetFormID() : 0u,
+			outgoingKey);
+
+		if (!outgoingActor || IsPlayer(outgoingActor)) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor rejected invalid/player actor");
+			return false;
+		}
+		if (outgoingKey.empty()) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor received empty outgoing key");
+			return false;
+		}
+
+		SwitchState state;
+		{
+			std::scoped_lock lock(StateLock);
+			state = Switch;
+		}
+		if (!state.pending) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor called without pending switch");
+			return false;
+		}
+		if (state.outgoingKey != outgoingKey) {
+			logger::error(
+				"ProteusWrapper: outgoing restore key mismatch prepared='{}' requested='{}'",
+				state.outgoingKey,
+				outgoingKey);
+			return false;
+		}
+
+		if (!GTS::CharacterProfile::Load(outgoingActor, outgoingKey)) {
+			logger::error(
+				"ProteusWrapper: failed hydrating outgoing inactive actor {:08X} key='{}'",
+				outgoingActor->GetFormID(),
+				outgoingKey);
+			return false;
+		}
+
+		{
+			std::scoped_lock lock(StateLock);
+			Switch.outgoingActorRestored = true;
+		}
+		logger::error(
+			"ProteusWrapper: RESTORED outgoing inactive actor {:08X} key='{}'",
+			outgoingActor->GetFormID(),
+			outgoingKey);
+		return true;
 	}
 
 	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey) {
@@ -208,13 +293,29 @@ namespace GTS::ProteusWrapper {
 			return false;
 		}
 
+		bool ok = false;
 		if (GTS::CharacterProfile::Load(player, incomingKey)) {
 			logger::info("ProteusWrapper: loaded incoming switch character key='{}'", incomingKey);
-			return true;
+			ok = true;
+		} else {
+			logger::warn("ProteusWrapper: no canonical profile for incoming key='{}'; initializing clean GTS state", incomingKey);
+			ok = InitializeFresh(player, incomingKey);
 		}
 
-		logger::warn("ProteusWrapper: no canonical profile for incoming key='{}'; initializing clean GTS state", incomingKey);
-		return InitializeFresh(player, incomingKey);
+		if (ok) {
+			SwitchState state;
+			{
+				std::scoped_lock lock(StateLock);
+				state = Switch;
+				Switch = {};
+			}
+			logger::error(
+				"ProteusWrapper: FINISHED switch outgoing='{}' outgoingActorRestored={} incoming='{}'",
+				state.outgoingKey,
+				state.outgoingActorRestored,
+				incomingKey);
+		}
+		return ok;
 	}
 
 	void HandleMenuOpenClose(const RE::MenuOpenCloseEvent* event) {
@@ -251,6 +352,10 @@ namespace GTS::ProteusWrapper {
 		if (NewCharacter.pending) {
 			logger::info("ProteusWrapper: clearing pending New Character transaction");
 		}
+		if (Switch.pending) {
+			logger::info("ProteusWrapper: clearing pending Switch transaction outgoing='{}'", Switch.outgoingKey);
+		}
 		NewCharacter = {};
+		Switch = {};
 	}
 }

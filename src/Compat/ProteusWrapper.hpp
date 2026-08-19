@@ -27,6 +27,11 @@ namespace GTS::ProteusWrapper {
 	// pending PrepareSwitch transaction, not from Papyrus.
 	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor);
 
+	// Papyrus bridge keeps a string argument for an easy surgical PEX call. The
+	// supplied string is diagnostic only; the pending PrepareSwitch key remains
+	// authoritative.
+	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor, std::string_view diagnosticKey);
+
 	// Character switch phase 3: load the incoming profile into Player after Proteus
 	// has finished loading that character. Missing JSON initializes a clean profile.
 	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey);

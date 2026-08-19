@@ -1,85 +1,33 @@
-name: Build Plugin
+name: Build Active Proteus Player PEX
+
 on:
   push:
     paths:
-      - 'src/**'
-      - 'cmake/**'
-      - 'CMakeLists.txt'
-      - 'CMakePresets.json'
-      - 'vcpkg.json'
-      - 'ProteusCompat/**'
-      - '.github/workflows/build.yml'
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'cmake/**'
-      - 'CMakeLists.txt'
-      - 'CMakePresets.json'
-      - 'vcpkg.json'
-      - 'ProteusCompat/**'
-      - '.github/workflows/build.yml'
+      - '.github/workflows/build-active-proteus-player-pex.yml'
+      - 'ProteusCompat/active-player-wrapper-trigger.txt'
   workflow_dispatch: {}
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   build:
     runs-on: windows-2025
     steps:
-      - name: Checkout repository
+      - name: Checkout compatibility repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
-      - name: Setup MSVC Environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: 'x64'
-
-      - name: Cache vcpkg
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/AppData/Local/vcpkg
-            vcpkg_installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            vcpkg-${{ runner.os }}-
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: cmake-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'CMakePresets.json') }}-${{ hashFiles('vcpkg.json') }}
-          restore-keys: |
-            cmake-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'CMakePresets.json') }}-
-            cmake-build-${{ runner.os }}-
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11.5
-        with:
-          vcpkgJsonGlob: vcpkg.json
-        env:
-          VCPKG_BINARY_SOURCES: 'clear;files,~/AppData/Local/vcpkg,readwrite'
-
-      - name: Build
-        uses: lukka/run-cmake@v10
-        with:
-          configurePreset: config-release
-          buildPreset: build-release
-
-      - name: Build active Proteus Player wrapper PEX
+      - name: Fetch and patch active Proteus Player script
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $repo = $PWD.Path
-
           git clone https://github.com/phenderix/PROTEUS.git deps\proteus
           if ($LASTEXITCODE -ne 0) { throw 'Proteus clone failed' }
           Set-Location deps\proteus
           git checkout fed75f6f30395e15b3d67ea3789e93737c09277a
           if ($LASTEXITCODE -ne 0) { throw 'Proteus checkout failed' }
-          Set-Location $repo
+          Set-Location ..\..
 
           $path = 'deps\proteus\PhenderixToolEditPlayerScript.psc'
           $text = (Get-Content $path -Raw).Replace("`r`n", "`n")
@@ -162,6 +110,10 @@ jobs:
           Set-Content -Path $path -Value $text -Encoding UTF8 -NoNewline
           Select-String -Path $path -Pattern '\[GTSWRAP\]|ProteusBeginNewCharacter|ProteusFinalizeNewCharacter|ProteusBeginSwitch|ProteusFinishSwitch' -Context 1,1
 
+      - name: Download Caprica
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
           Invoke-WebRequest -Uri 'https://github.com/Orvid/Caprica/releases/download/v0.3.0/Caprica.v0.3.0.7z' -OutFile caprica.7z
           New-Item -ItemType Directory -Force -Path tools\caprica | Out-Null
           & 'C:\Program Files\7-Zip\7z.exe' x caprica.7z '-otools\caprica' -y
@@ -170,41 +122,59 @@ jobs:
           if (-not $caprica) { throw 'Caprica.exe not found' }
           Copy-Item $caprica.FullName tools\Caprica.exe -Force
 
+      - name: Fetch Papyrus headers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
           git clone --depth 1 https://github.com/Rukan/Grimy-Skyrim-Papyrus-Source.git deps\skyrim
-          if ($LASTEXITCODE -ne 0) { throw 'Skyrim Papyrus headers clone failed' }
-          New-Item -ItemType Directory -Force -Path build\papyrus-imports | Out-Null
-          Get-ChildItem deps\skyrim -Filter *.psc -File | Copy-Item -Destination build\papyrus-imports -Force
-          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File | Copy-Item -Destination build\papyrus-imports -Force
-          'Scriptname Container extends Form Hidden' | Set-Content build\papyrus-imports\Container.psc -Encoding ASCII
-          @('', '; SKSE64 light-plugin functions required by Proteus', 'int Function GetLightModCount() native global', 'string Function GetLightModName(int idx) native global') | Add-Content build\papyrus-imports\Game.psc -Encoding ASCII
+          if ($LASTEXITCODE -ne 0) { throw 'Skyrim Papyrus source clone failed' }
+          New-Item -ItemType Directory -Force -Path build\imports | Out-Null
+          Get-ChildItem deps\skyrim -Filter *.psc -File | Copy-Item -Destination build\imports -Force
+          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File | Copy-Item -Destination build\imports -Force
+          'Scriptname Container extends Form Hidden' | Set-Content build\imports\Container.psc -Encoding ASCII
+          @('', '; SKSE64 light-plugin functions required by Proteus', 'int Function GetLightModCount() native global', 'string Function GetLightModName(int idx) native global') | Add-Content build\imports\Game.psc -Encoding ASCII
           @('// List of flags for TESV', '', 'Flag Hidden 0', '{', '    Script', '    Property', '}', '', 'Flag Conditional 1', '{', '    Script', '    Variable', '}') | Set-Content build\TESV_Papyrus_Flags.flg -Encoding ASCII
 
-          New-Item -ItemType Directory -Force -Path build\papyrus-out | Out-Null
+      - name: Compile active Player and GTS runtime scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = $PWD.Path
+          New-Item -ItemType Directory -Force -Path build\out | Out-Null
+
           Set-Location "$repo\deps\proteus"
-          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\papyrus-imports" --import "$repo\deps\proteus" --output "$repo\build\papyrus-out" "PhenderixToolEditPlayerScript.psc"
-          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling active Proteus Player script' }
+          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\imports" --import "$repo\deps\proteus" --output "$repo\build\out" "PhenderixToolEditPlayerScript.psc"
+          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling PhenderixToolEditPlayerScript' }
 
           Set-Location "$repo\ProteusCompat\Headers"
-          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\papyrus-imports" --output "$repo\build\papyrus-out" "GTSPlugin.psc"
-          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling GTSPlugin runtime script' }
+          & "$repo\tools\Caprica.exe" --game skyrim --flags "$repo\build\TESV_Papyrus_Flags.flg" --import "$repo\build\imports" --output "$repo\build\out" "GTSPlugin.psc"
+          if ($LASTEXITCODE -ne 0) { throw 'Caprica failed compiling GTSPlugin' }
           Set-Location $repo
 
-          $playerPex = Get-ChildItem build\papyrus-out -Recurse -Filter PhenderixToolEditPlayerScript.pex | Select-Object -First 1
-          $gtsPex = Get-ChildItem build\papyrus-out -Recurse -Filter GTSPlugin.pex | Select-Object -First 1
-          if (-not $playerPex) { throw 'PhenderixToolEditPlayerScript.pex was not produced' }
-          if (-not $gtsPex) { throw 'GTSPlugin.pex was not produced' }
+          $player = Get-ChildItem build\out -Recurse -Filter PhenderixToolEditPlayerScript.pex | Select-Object -First 1
+          $gts = Get-ChildItem build\out -Recurse -Filter GTSPlugin.pex | Select-Object -First 1
+          if (-not $player) { throw 'Player PEX not produced' }
+          if (-not $gts) { throw 'GTSPlugin PEX not produced' }
 
-          $package = Get-ChildItem distribution -Directory -Filter 'Package-*' | Select-Object -First 1
-          if (-not $package) { throw 'Distribution package directory not found' }
-          New-Item -ItemType Directory -Force -Path "$($package.FullName)\Scripts" | Out-Null
-          Copy-Item $playerPex.FullName "$($package.FullName)\Scripts\PhenderixToolEditPlayerScript.pex" -Force
-          Copy-Item $gtsPex.FullName "$($package.FullName)\Scripts\GTSPlugin.pex" -Force
-          Write-Host "Bundled Player PEX: $($playerPex.FullName)"
-          Write-Host "Bundled GTS PEX: $($gtsPex.FullName)"
+          New-Item -ItemType Directory -Force -Path artifact\Scripts | Out-Null
+          Copy-Item $player.FullName artifact\Scripts\PhenderixToolEditPlayerScript.pex
+          Copy-Item $gts.FullName artifact\Scripts\GTSPlugin.pex
 
-      - name: Upload Distribution Package
+      - name: Upload active Player wrapper PEX
         uses: actions/upload-artifact@v4
         with:
-          name: distribution-package
-          path: distribution/Package-*
+          name: active-proteus-player-wrapper-pex
+          path: artifact/
           if-no-files-found: error
+
+      - name: Publish run ID to wrapper PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 3,
+              body: `Active Proteus Player PEX workflow run: ${context.runId} — conclusion: ${{ job.status }} — head: ${context.sha}`
+            });

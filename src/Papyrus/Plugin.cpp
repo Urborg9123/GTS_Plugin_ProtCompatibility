@@ -1,5 +1,6 @@
 #include "Papyrus/Plugin.hpp"
 #include "Compat/ProteusProfile.hpp"
+#include "Compat/ProteusWrapper.hpp"
 #include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
@@ -82,6 +83,31 @@ namespace {
 		GTS::ProteusProfile::ResetNewCharacter(player);
 	}
 
+	bool ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor, outgoingKey);
+	}
+
+	bool ProteusFinalizeNewCharacter(StaticFunctionTag*, Actor* player) {
+		return GTS::ProteusWrapper::FinalizeNewCharacter(player);
+	}
+
+	bool ProteusBeginSwitch(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor, outgoingKey);
+	}
+
+	bool ProteusPrepareSwitch(StaticFunctionTag*, Actor* player, std::string outgoingKey) {
+		return GTS::ProteusWrapper::PrepareSwitch(player, outgoingKey);
+	}
+
+	bool ProteusRestoreOutgoingSwitchActor(StaticFunctionTag*, Actor* outgoingActor, std::string diagnosticKey) {
+		(void)diagnosticKey;
+		return GTS::ProteusWrapper::RestoreOutgoingSwitchActor(outgoingActor);
+	}
+
+	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, std::string incomingKey) {
+		return GTS::ProteusWrapper::FinishSwitch(player, incomingKey);
+	}
+
 	void ResetQuestProgression(StaticFunctionTag*) {
 		GTS::ResetQuest();
 	}
@@ -150,11 +176,19 @@ namespace GTS {
 		vm->RegisterFunction("GetTotalKills", PapyrusClass, GetTotalKills);
 		vm->RegisterFunction("SetTotalKills", PapyrusClass, SetTotalKills);
 
-		// Proteus compatibility: GTS owns the character profile; Proteus only
-		// supplies the stable inactive-character actor at switch boundaries.
+		// Legacy native Proteus profile bridge retained while the lifecycle
+		// wrapper is validated.
 		vm->RegisterFunction("ProteusProfileSave", PapyrusClass, ProteusProfileSave);
 		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
+
+		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence.
+		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
+		vm->RegisterFunction("ProteusFinalizeNewCharacter", PapyrusClass, ProteusFinalizeNewCharacter);
+		vm->RegisterFunction("ProteusBeginSwitch", PapyrusClass, ProteusBeginSwitch);
+		vm->RegisterFunction("ProteusPrepareSwitch", PapyrusClass, ProteusPrepareSwitch);
+		vm->RegisterFunction("ProteusRestoreOutgoingSwitchActor", PapyrusClass, ProteusRestoreOutgoingSwitchActor);
+		vm->RegisterFunction("ProteusFinishSwitch", PapyrusClass, ProteusFinishSwitch);
 
 		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);

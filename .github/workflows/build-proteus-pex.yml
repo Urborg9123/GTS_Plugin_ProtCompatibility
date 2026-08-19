@@ -6,6 +6,10 @@ on:
     paths:
       - 'ProteusCompat/**'
       - '.github/workflows/build-proteus-pex.yml'
+  pull_request:
+    paths:
+      - 'ProteusCompat/**'
+      - '.github/workflows/build-proteus-pex.yml'
 
 permissions:
   contents: read
@@ -13,178 +17,15 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
-
     steps:
-      - name: Checkout repository
+      - name: Checkout GTS compatibility repository
         uses: actions/checkout@v6
-
-      - name: Apply native GTS Proteus patch
+      - name: Build exact installed Proteus Player wrapper PEX
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          git apply --check ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch check failed with exit code $LASTEXITCODE"
-          }
-
-          git apply ProteusCompat/ProteusRecurringQuestScript_GTSNative.patch
-          if ($LASTEXITCODE -ne 0) {
-            throw "Proteus GTS patch apply failed with exit code $LASTEXITCODE"
-          }
-
-          git diff --check
-          if ($LASTEXITCODE -ne 0) {
-            throw "Patched Proteus source failed git diff --check"
-          }
-
-          Write-Host 'Native GTS Proteus patch applied.'
-
-      - name: Download Caprica
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $url = 'https://github.com/Orvid/Caprica/releases/download/v0.3.0/Caprica.v0.3.0.7z'
-          Invoke-WebRequest -Uri $url -OutFile caprica.7z
-
-          New-Item -ItemType Directory -Force -Path tools\caprica | Out-Null
-          & 'C:\Program Files\7-Zip\7z.exe' x caprica.7z '-otools\caprica' -y
-          if ($LASTEXITCODE -ne 0) {
-            throw "7-Zip extraction failed with exit code $LASTEXITCODE"
-          }
-
-          $caprica = Get-ChildItem tools\caprica -Recurse -Filter Caprica.exe |
-            Select-Object -First 1
-
-          if (-not $caprica) {
-            throw 'Caprica.exe was not found after extraction.'
-          }
-
-          Copy-Item $caprica.FullName tools\Caprica.exe -Force
-
-          if (-not (Test-Path tools\Caprica.exe)) {
-            throw 'Caprica.exe was not copied successfully.'
-          }
-
-          Write-Host "Caprica ready: $(Resolve-Path tools\Caprica.exe)"
-
-      - name: Fetch Skyrim and SKSE Papyrus headers
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          git clone --depth 1 https://github.com/Rukan/Grimy-Skyrim-Papyrus-Source.git deps\skyrim
-          if ($LASTEXITCODE -ne 0) {
-            throw "Header repository clone failed with exit code $LASTEXITCODE"
-          }
-
-          New-Item -ItemType Directory -Force -Path build\imports | Out-Null
-
-          Get-ChildItem deps\skyrim -Filter *.psc -File |
-            Copy-Item -Destination build\imports -Force
-
-          Get-ChildItem ProteusCompat\Headers -Filter *.psc -File |
-            Copy-Item -Destination build\imports -Force
-
-          # Container is a vanilla Skyrim Papyrus form type, but it is missing
-          # from the lightweight source set we use for CI. Proteus declares
-          # one Container property, so provide the minimal compile-time header.
-          'Scriptname Container extends Form Hidden' |
-            Set-Content -Path build\imports\Container.psc -Encoding ASCII
-
-          # The lightweight Skyrim/SKSE source pack is old and lacks the
-          # light-plugin helpers added to modern SKSE64's Game.psc.
-          @(
-            ''
-            '; SKSE64 light-plugin functions required by Proteus'
-            'int Function GetLightModCount() native global'
-            'string Function GetLightModName(int idx) native global'
-          ) | Add-Content -Path build\imports\Game.psc -Encoding ASCII
-
-          Write-Host ('Header count: ' + (Get-ChildItem build\imports -Filter *.psc -File).Count)
-
-      - name: Create Skyrim Papyrus flags
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          New-Item -ItemType Directory -Force -Path build | Out-Null
-
-          $flags = @(
-            '// List of flags for TESV'
-            ''
-            '// Flag hides the script or property from the game editor'
-            'Flag Hidden 0'
-            '{'
-            '    Script'
-            '    Property'
-            '}'
-            ''
-            '// Flag on an object designates it as the script the condition system will look at'
-            '// Flag on a variable allows the script variable to be examined by the condition system'
-            'Flag Conditional 1'
-            '{'
-            '    Script'
-            '    Variable'
-            '}'
-          )
-
-          $flags | Set-Content -Path build\TESV_Papyrus_Flags.flg -Encoding ASCII
-          Get-Content build\TESV_Papyrus_Flags.flg
-
-      - name: Compile ProteusRecurringQuestScript
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          $repo = $PWD.Path
-          New-Item -ItemType Directory -Force -Path "$repo\build\out" | Out-Null
-
-          Set-Location "$repo\ProteusCompat\Source"
-
-          & "$repo\tools\Caprica.exe" `
-            --game skyrim `
-            --flags "$repo\build\TESV_Papyrus_Flags.flg" `
-            --import "$repo\build\imports" `
-            --output "$repo\build\out" `
-            "ProteusRecurringQuestScript.psc"
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "Caprica failed with exit code $LASTEXITCODE"
-          }
-
-          Set-Location $repo
-
-          $pex = Get-ChildItem "$repo\build\out" -Recurse -Filter ProteusRecurringQuestScript.pex |
-            Select-Object -First 1
-
-          if (-not $pex) {
-            throw 'ProteusRecurringQuestScript.pex was not produced.'
-          }
-
-          Write-Host "Compiled: $($pex.FullName)"
-
-      - name: Stage compatibility package
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-
-          New-Item -ItemType Directory -Force -Path artifact\Scripts | Out-Null
-          New-Item -ItemType Directory -Force -Path artifact\Source\Scripts | Out-Null
-
-          $pex = Get-ChildItem build\out -Recurse -Filter ProteusRecurringQuestScript.pex |
-            Select-Object -First 1
-
-          Copy-Item $pex.FullName artifact\Scripts\ProteusRecurringQuestScript.pex
-          Copy-Item ProteusCompat\Source\ProteusRecurringQuestScript.psc artifact\Source\Scripts\ProteusRecurringQuestScript.psc
-          Copy-Item ProteusCompat\Headers\GTSPlugin.psc artifact\Source\Scripts\GTSPlugin.psc
-
-          Get-ChildItem artifact -Recurse | Select-Object FullName, Length
-
+        run: ./ProteusCompat/CI/build-exact-player.ps1
       - name: Upload Proteus GTS Papyrus artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Proteus-GTS-Native-Profile-Papyrus
+          name: Proteus-GTS-Exact-Player-Wrapper-Papyrus
           path: artifact/
           if-no-files-found: error

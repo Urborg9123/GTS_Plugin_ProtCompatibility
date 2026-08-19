@@ -87,6 +87,15 @@ namespace {
 		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor, outgoingKey);
 	}
 
+	bool ProteusPrepareNewCharacter(StaticFunctionTag*, Actor* player, std::string outgoingKey) {
+		return GTS::ProteusWrapper::PrepareNewCharacter(player, outgoingKey);
+	}
+
+	bool ProteusRestoreOutgoingNewCharacterActor(StaticFunctionTag*, Actor* outgoingActor, std::string diagnosticKey) {
+		(void)diagnosticKey;
+		return GTS::ProteusWrapper::RestoreOutgoingNewCharacterActor(outgoingActor);
+	}
+
 	bool ProteusFinalizeNewCharacter(StaticFunctionTag*, Actor* player) {
 		return GTS::ProteusWrapper::FinalizeNewCharacter(player);
 	}
@@ -132,15 +141,6 @@ namespace {
 	}
 
 	void ForceStartSizeInteraction(StaticFunctionTag*, Actor* Pred, Actor* Prey, int Type) {
-		// 0 = Vore
-		// 1 = Devourment (Only with Devourment)
-		// 2 = Stomp
-		// 3 = Kicks
-		// 4 = Thigh Sandwich
-		// 5 = Thigh Crush
-		// 6 = Butt Crush
-		// 7 = Hugs
-		// 8 = Grab
 		if (Pred && Prey) {
 			switch (Type) {
 				case 0: VoreAI_StartVore(Pred, std::vector<Actor*> {Prey}); break;
@@ -168,7 +168,6 @@ namespace GTS {
 
 	bool register_papyrus_plugin(IVirtualMachine* vm) {
 
-		//Quest
 		vm->RegisterFunction("ResetQuestProgression", PapyrusClass, ResetQuestProgression);
 		vm->RegisterFunction("Quest_GetProgression", PapyrusClass, Quest_GetProgression);
 		vm->RegisterFunction("WasDragonEaten", PapyrusClass, WasDragonEaten);
@@ -176,21 +175,19 @@ namespace GTS {
 		vm->RegisterFunction("GetTotalKills", PapyrusClass, GetTotalKills);
 		vm->RegisterFunction("SetTotalKills", PapyrusClass, SetTotalKills);
 
-		// Legacy native Proteus profile bridge retained while the lifecycle
-		// wrapper is validated.
 		vm->RegisterFunction("ProteusProfileSave", PapyrusClass, ProteusProfileSave);
 		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
 
-		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence.
 		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
+		vm->RegisterFunction("ProteusPrepareNewCharacter", PapyrusClass, ProteusPrepareNewCharacter);
+		vm->RegisterFunction("ProteusRestoreOutgoingNewCharacterActor", PapyrusClass, ProteusRestoreOutgoingNewCharacterActor);
 		vm->RegisterFunction("ProteusFinalizeNewCharacter", PapyrusClass, ProteusFinalizeNewCharacter);
 		vm->RegisterFunction("ProteusBeginSwitch", PapyrusClass, ProteusBeginSwitch);
 		vm->RegisterFunction("ProteusPrepareSwitch", PapyrusClass, ProteusPrepareSwitch);
 		vm->RegisterFunction("ProteusRestoreOutgoingSwitchActor", PapyrusClass, ProteusRestoreOutgoingSwitchActor);
 		vm->RegisterFunction("ProteusFinishSwitch", PapyrusClass, ProteusFinishSwitch);
 
-		//Devourment
 		vm->RegisterFunction("CallDevourmentCompatibility", PapyrusClass, CallDevourmentCompatibility);
 		vm->RegisterFunction("ForceStartSizeInteraction", PapyrusClass, ForceStartSizeInteraction);
 

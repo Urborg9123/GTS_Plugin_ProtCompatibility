@@ -17,12 +17,19 @@ Bool Function ProteusProfileSave(Actor akPlayer, Actor akProteusActor) global na
 Bool Function ProteusProfileLoad(Actor akPlayer, Actor akProteusActor) global native
 Function ProteusProfileResetNewCharacter(Actor akPlayer) global native
 
-; Proteus lifecycle wrapper. GTSCharacterProfile JSON is authoritative; Proteus
-; supplies the explicit preset key because its actor slots are repurposed during
-; a character swap and cannot safely identify the incoming character afterward.
+; Proteus lifecycle wrapper.
 Bool Function ProteusBeginNewCharacter(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinalizeNewCharacter(Actor akPlayer) global native
+
+; Legacy switch entry retained for older test PEX builds.
 Bool Function ProteusBeginSwitch(Actor akPlayer, Actor akOutgoingActor, String asOutgoingKey) global native
+
+; Three-phase switch path:
+; 1) save+reset Player before Proteus begins its own switch workflow,
+; 2) hydrate the explicitly resolved outgoing inactive actor after Proteus spawns it,
+; 3) restore the incoming Player profile after Proteus finishes loading it.
+Bool Function ProteusPrepareSwitch(Actor akPlayer, String asOutgoingKey) global native
+Bool Function ProteusRestoreOutgoingSwitchActor(Actor akOutgoingActor, String asOutgoingKey) global native
 Bool Function ProteusFinishSwitch(Actor akPlayer, String asIncomingKey) global native
 
 ; Active Player-script wrapper CI trigger marker.

@@ -1,3 +1,4 @@
 CI trigger for Player Full Assimilation stolen-attribute earning/distribution 100x.
 NPC copied/stored bonuses remain 1x.
 Run against deterministic overlay.
+Final trigger.

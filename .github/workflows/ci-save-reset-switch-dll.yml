@@ -1,0 +1,62 @@
+name: CI Save Reset Switch DLL
+
+on:
+  pull_request:
+    branches:
+      - ci/build44-base
+    paths:
+      - 'src/**'
+      - 'cmake/**'
+      - 'CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'vcpkg.json'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup MSVC Environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: 'x64'
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/vcpkg
+            vcpkg_installed
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: cmake-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'CMakePresets.json') }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            cmake-build-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'CMakePresets.json') }}-
+            cmake-build-${{ runner.os }}-
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11.5
+        with:
+          vcpkgJsonGlob: vcpkg.json
+        env:
+          VCPKG_BINARY_SOURCES: 'clear;files,~/AppData/Local/vcpkg,readwrite'
+      - name: Build
+        uses: lukka/run-cmake@v10
+        with:
+          configurePreset: config-release
+          buildPreset: build-release
+      - name: Upload Distribution Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: save-reset-switch-distribution
+          path: distribution/Package-*
+          if-no-files-found: error

@@ -95,6 +95,14 @@ namespace {
 		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor, outgoingKey);
 	}
 
+	bool ProteusPrepareSwitch(StaticFunctionTag*, Actor* player, std::string outgoingKey) {
+		return GTS::ProteusWrapper::PrepareSwitch(player, outgoingKey);
+	}
+
+	bool ProteusRestoreOutgoingSwitchActor(StaticFunctionTag*, Actor* outgoingActor, std::string outgoingKey) {
+		return GTS::ProteusWrapper::RestoreOutgoingSwitchActor(outgoingActor, outgoingKey);
+	}
+
 	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, std::string incomingKey) {
 		return GTS::ProteusWrapper::FinishSwitch(player, incomingKey);
 	}
@@ -173,11 +181,12 @@ namespace GTS {
 		vm->RegisterFunction("ProteusProfileLoad", PapyrusClass, ProteusProfileLoad);
 		vm->RegisterFunction("ProteusProfileResetNewCharacter", PapyrusClass, ProteusProfileResetNewCharacter);
 
-		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence;
-		// Proteus supplies explicit preset keys at the swap boundaries.
+		// Proteus lifecycle wrapper. GTSCharacterProfile JSON owns persistence.
 		vm->RegisterFunction("ProteusBeginNewCharacter", PapyrusClass, ProteusBeginNewCharacter);
 		vm->RegisterFunction("ProteusFinalizeNewCharacter", PapyrusClass, ProteusFinalizeNewCharacter);
 		vm->RegisterFunction("ProteusBeginSwitch", PapyrusClass, ProteusBeginSwitch);
+		vm->RegisterFunction("ProteusPrepareSwitch", PapyrusClass, ProteusPrepareSwitch);
+		vm->RegisterFunction("ProteusRestoreOutgoingSwitchActor", PapyrusClass, ProteusRestoreOutgoingSwitchActor);
 		vm->RegisterFunction("ProteusFinishSwitch", PapyrusClass, ProteusFinishSwitch);
 
 		//Devourment

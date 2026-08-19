@@ -13,15 +13,22 @@ namespace GTS::ProteusWrapper {
 	// character. Requires a matching RaceMenu open+close transaction.
 	bool FinalizeNewCharacter(RE::Actor* player);
 
-	// Character switch: save the outgoing Player under Proteus's explicit
-	// playerPresetName and refresh the stable inactive actor cache before Proteus
-	// overwrites Player 0x14.
+	// Legacy switch entry retained for older test PEX builds.
 	bool BeginSwitch(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey);
 
-	// Character switch: load targetPresetName into Player after Proteus has loaded
-	// that character. We intentionally do not derive identity from the `target`
-	// actor because Proteus repurposes that actor to hold the outgoing character
-	// during the swap. Missing JSON initializes a clean profile.
+	// New switch phase 1. Save the live outgoing Player profile, then immediately
+	// clear character-owned GTS state from Player 0x14 BEFORE Proteus begins its
+	// own character-save/swap workflow. No Proteus actor reference is accepted at
+	// this boundary because the inactive slot identity is ambiguous here.
+	bool PrepareSwitch(RE::Actor* player, std::string_view outgoingKey);
+
+	// New switch phase 2. Called only after Proteus has spawned/loaded the outgoing
+	// character into its inactive actor slot. Hydrate that resolved actor from the
+	// canonical outgoing JSON profile.
+	bool RestoreOutgoingSwitchActor(RE::Actor* outgoingActor, std::string_view outgoingKey);
+
+	// Character switch phase 3: load the incoming profile into Player after Proteus
+	// has finished loading that character. Missing JSON initializes a clean profile.
 	bool FinishSwitch(RE::Actor* player, std::string_view incomingKey);
 
 	// Existing GTS UI event sink forwards RaceMenu lifecycle events here.

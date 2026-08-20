@@ -8,6 +8,7 @@ namespace GTS::ProteusWrapper {
 	namespace {
 		struct NewCharacterState {
 			bool pending = false;
+			bool playerReset = false;
 			bool outgoingActorRestored = false;
 			bool raceMenuOpened = false;
 			bool raceMenuClosed = false;
@@ -16,6 +17,7 @@ namespace GTS::ProteusWrapper {
 
 		struct SwitchState {
 			bool pending = false;
+			bool playerReset = false;
 			bool outgoingActorRestored = false;
 			std::string outgoingKey;
 		};
@@ -67,7 +69,7 @@ namespace GTS::ProteusWrapper {
 			return true;
 		}
 
-		bool SaveAndResetPlayer(RE::Actor* player, std::string_view key, std::string_view flow) {
+		bool SavePlayerOnly(RE::Actor* player, std::string_view key, std::string_view flow) {
 			if (key.empty()) {
 				logger::error("ProteusWrapper: {} refused empty outgoing preset key", flow);
 				return false;
@@ -78,8 +80,17 @@ namespace GTS::ProteusWrapper {
 				return false;
 			}
 
+			return true;
+		}
+
+		bool ResetPlayerNow(RE::Actor* player, std::string_view key, std::string_view flow) {
+			if (!IsPlayer(player)) {
+				logger::error("ProteusWrapper: {} cannot reset invalid/non-player actor", flow);
+				return false;
+			}
+
 			if (!GTS::CharacterProfile::Reset(player)) {
-				logger::error("ProteusWrapper: {} saved '{}' but failed resetting Player", flow, key);
+				logger::error("ProteusWrapper: {} failed resetting Player for outgoing key='{}'", flow, key);
 				return false;
 			}
 
@@ -107,8 +118,6 @@ namespace GTS::ProteusWrapper {
 	}
 
 	bool BeginNewCharacter(RE::Actor* player, RE::Actor* outgoingActor, std::string_view outgoingKey) {
-		// Legacy entry retained for older test PEX builds. The validated replacement
-		// is PrepareNewCharacter -> RestoreOutgoingNewCharacterActor -> Finalize.
 		logger::error(
 			"ProteusWrapper: ENTER BeginNewCharacter(legacy) player={:08X} outgoing={:08X} key='{}'",
 			player ? player->GetFormID() : 0u,
@@ -131,6 +140,7 @@ namespace GTS::ProteusWrapper {
 		{
 			std::scoped_lock lock(StateLock);
 			NewCharacter.pending = true;
+			NewCharacter.playerReset = false;
 			NewCharacter.outgoingActorRestored = outgoingActor != nullptr;
 			NewCharacter.raceMenuOpened = false;
 			NewCharacter.raceMenuClosed = false;
@@ -151,22 +161,26 @@ namespace GTS::ProteusWrapper {
 			return false;
 		}
 
-		// Snapshot the outgoing character while Player 0x14 still unequivocally
-		// represents it, then clear GTS character state before Proteus serializes it.
-		if (!SaveAndResetPlayer(player, outgoingKey, "PrepareNewCharacter")) {
+		// Save only here. The surgical Proteus hook is intentionally before
+		// Proteus_CharacterSave(), so resetting here would cause Proteus to serialize
+		// the already-reset character. Reset is deferred until the outgoing actor has
+		// actually been spawned, which naturally leaves Proteus's own save and waits
+		// between our GTS save and reset.
+		if (!SavePlayerOnly(player, outgoingKey, "PrepareNewCharacter")) {
 			return false;
 		}
 
 		{
 			std::scoped_lock lock(StateLock);
 			NewCharacter.pending = true;
+			NewCharacter.playerReset = false;
 			NewCharacter.outgoingActorRestored = false;
 			NewCharacter.raceMenuOpened = false;
 			NewCharacter.raceMenuClosed = false;
 			NewCharacter.oldKey = std::string(outgoingKey);
 		}
 
-		logger::error("ProteusWrapper: NEWCHAR PREPARED outgoing='{}' saved=true reset=true", outgoingKey);
+		logger::error("ProteusWrapper: NEWCHAR PREPARED outgoing='{}' saved=true resetDeferred=true", outgoingKey);
 		return true;
 	}
 
@@ -178,17 +192,32 @@ namespace GTS::ProteusWrapper {
 		}
 
 		logger::error(
-			"ProteusWrapper: ENTER RestoreOutgoingNewCharacterActor actor={:08X} preparedKey='{}'",
+			"ProteusWrapper: ENTER RestoreOutgoingNewCharacterActor actor={:08X} preparedKey='{}' playerReset={}",
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
-			state.oldKey);
+			state.oldKey,
+			state.playerReset);
 
+		if (!state.pending || state.oldKey.empty()) {
+			logger::error("ProteusWrapper: RestoreOutgoingNewCharacterActor called without valid pending transaction");
+			return false;
+		}
 		if (!outgoingActor || IsPlayer(outgoingActor)) {
 			logger::error("ProteusWrapper: RestoreOutgoingNewCharacterActor rejected invalid/player actor");
 			return false;
 		}
-		if (!state.pending || state.oldKey.empty()) {
-			logger::error("ProteusWrapper: RestoreOutgoingNewCharacterActor called without valid pending transaction");
-			return false;
+
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!state.playerReset) {
+			if (!ResetPlayerNow(player, state.oldKey, "RestoreOutgoingNewCharacterActor")) {
+				return false;
+			}
+			{
+				std::scoped_lock lock(StateLock);
+				NewCharacter.playerReset = true;
+			}
+			logger::error(
+				"ProteusWrapper: NEWCHAR RESET Player after Proteus saved/spawned outgoing key='{}'",
+				state.oldKey);
 		}
 
 		if (!GTS::CharacterProfile::Load(outgoingActor, state.oldKey)) {
@@ -230,6 +259,10 @@ namespace GTS::ProteusWrapper {
 			logger::error("ProteusWrapper: FinalizeNewCharacter called without pending transaction");
 			return false;
 		}
+		if (!state.playerReset) {
+			logger::error("ProteusWrapper: FinalizeNewCharacter rejected transaction where deferred Player reset never ran");
+			return false;
+		}
 		if (!state.raceMenuOpened || !state.raceMenuClosed) {
 			logger::error(
 				"ProteusWrapper: FinalizeNewCharacter rejected incomplete RaceMenu transaction open={} close={}",
@@ -256,8 +289,9 @@ namespace GTS::ProteusWrapper {
 			std::scoped_lock lock(StateLock);
 			NewCharacter = {};
 			logger::error(
-				"ProteusWrapper: NEWCHAR FINISHED outgoing='{}' outgoingActorRestored={} incoming='{}'",
+				"ProteusWrapper: NEWCHAR FINISHED outgoing='{}' playerReset={} outgoingActorRestored={} incoming='{}'",
 				state.oldKey,
+				state.playerReset,
 				state.outgoingActorRestored,
 				newKey);
 		}
@@ -284,18 +318,22 @@ namespace GTS::ProteusWrapper {
 			return false;
 		}
 
-		if (!SaveAndResetPlayer(player, outgoingKey, "PrepareSwitch")) {
+		// Save only here. Proteus still needs to serialize the intact outgoing
+		// character. The reset happens later at RestoreOutgoingSwitchActor(), after
+		// Proteus has completed its own save and spawned the outgoing character.
+		if (!SavePlayerOnly(player, outgoingKey, "PrepareSwitch")) {
 			return false;
 		}
 
 		{
 			std::scoped_lock lock(StateLock);
 			Switch.pending = true;
+			Switch.playerReset = false;
 			Switch.outgoingActorRestored = false;
 			Switch.outgoingKey = std::string(outgoingKey);
 		}
 
-		logger::error("ProteusWrapper: PREPARED outgoing='{}' saved=true reset=true", outgoingKey);
+		logger::error("ProteusWrapper: PREPARED outgoing='{}' saved=true resetDeferred=true", outgoingKey);
 		return true;
 	}
 
@@ -307,17 +345,32 @@ namespace GTS::ProteusWrapper {
 		}
 
 		logger::error(
-			"ProteusWrapper: ENTER RestoreOutgoingSwitchActor actor={:08X} preparedKey='{}'",
+			"ProteusWrapper: ENTER RestoreOutgoingSwitchActor actor={:08X} preparedKey='{}' playerReset={}",
 			outgoingActor ? outgoingActor->GetFormID() : 0u,
-			state.outgoingKey);
+			state.outgoingKey,
+			state.playerReset);
 
+		if (!state.pending || state.outgoingKey.empty()) {
+			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor called without valid pending switch");
+			return false;
+		}
 		if (!outgoingActor || IsPlayer(outgoingActor)) {
 			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor rejected invalid/player actor");
 			return false;
 		}
-		if (!state.pending || state.outgoingKey.empty()) {
-			logger::error("ProteusWrapper: RestoreOutgoingSwitchActor called without valid pending switch");
-			return false;
+
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!state.playerReset) {
+			if (!ResetPlayerNow(player, state.outgoingKey, "RestoreOutgoingSwitchActor")) {
+				return false;
+			}
+			{
+				std::scoped_lock lock(StateLock);
+				Switch.playerReset = true;
+			}
+			logger::error(
+				"ProteusWrapper: RESET Player after Proteus saved/spawned outgoing key='{}'",
+				state.outgoingKey);
 		}
 
 		if (!GTS::CharacterProfile::Load(outgoingActor, state.outgoingKey)) {
@@ -354,6 +407,16 @@ namespace GTS::ProteusWrapper {
 			return false;
 		}
 
+		SwitchState state;
+		{
+			std::scoped_lock lock(StateLock);
+			state = Switch;
+		}
+		if (state.pending && !state.playerReset) {
+			logger::error("ProteusWrapper: FinishSwitch rejected transaction where deferred Player reset never ran");
+			return false;
+		}
+
 		bool ok = false;
 		if (GTS::CharacterProfile::Load(player, incomingKey)) {
 			logger::info("ProteusWrapper: loaded incoming switch character key='{}'", incomingKey);
@@ -364,15 +427,14 @@ namespace GTS::ProteusWrapper {
 		}
 
 		if (ok) {
-			SwitchState state;
 			{
 				std::scoped_lock lock(StateLock);
-				state = Switch;
 				Switch = {};
 			}
 			logger::error(
-				"ProteusWrapper: FINISHED switch outgoing='{}' outgoingActorRestored={} incoming='{}'",
+				"ProteusWrapper: FINISHED switch outgoing='{}' playerReset={} outgoingActorRestored={} incoming='{}'",
 				state.outgoingKey,
+				state.playerReset,
 				state.outgoingActorRestored,
 				incomingKey);
 		}

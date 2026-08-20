@@ -3,6 +3,7 @@
 #include "Managers/AttributeManager.hpp"
 #include "Managers/AI/AIFunctions.hpp"
 #include "Config/Config.hpp"
+#include "Compat/ProteusSaveMask.hpp"
 
 using namespace GTS;
 
@@ -30,6 +31,16 @@ namespace {
 		}
 		
 		return original;
+	}
+
+	bool IsProteusMaskedBaseAttribute(Actor* actor, ActorValue av) {
+		if (!actor || !actor->IsPlayerRef() || !GTS::ProteusSaveMask::IsActive()) {
+			return false;
+		}
+
+		return av == ActorValue::kHealth ||
+		       av == ActorValue::kMagicka ||
+		       av == ActorValue::kStamina;
 	}
 }
 
@@ -102,7 +113,7 @@ namespace Hooks {
 				GTS_PROFILE_ENTRYPOINT_UNIQUE("ActorValueOwner::GetBaseActorValue", ID);
 
 				const auto actor = skyrim_cast<Actor*>(a_owner);
-				if (actor) {
+				if (actor && !IsProteusMaskedBaseAttribute(actor, a_akValue)) {
 					value = AttributeManager::AlterGetBaseAv(actor, a_akValue, value);
 				}
 

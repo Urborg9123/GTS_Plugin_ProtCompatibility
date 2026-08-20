@@ -1,2 +1,3 @@
 CI-only trigger for New Character save/reset + NPC stolen attributes 100x test build.
 Deterministic source overlay rerun.
+Deferred-reset build synchronization.

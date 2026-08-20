@@ -1,6 +1,7 @@
 #include "Papyrus/Plugin.hpp"
 #include "Compat/ProteusProfile.hpp"
 #include "Compat/ProteusWrapper.hpp"
+#include "Compat/ProteusSaveMask.hpp"
 #include "Data/Persistent.hpp"
 #include "Utils/Text/Text.hpp"
 
@@ -84,36 +85,62 @@ namespace {
 	}
 
 	bool ProteusBeginNewCharacter(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		GTS::ProteusSaveMask::Set(false);
 		return GTS::ProteusWrapper::BeginNewCharacter(player, outgoingActor, outgoingKey);
 	}
 
 	bool ProteusPrepareNewCharacter(StaticFunctionTag*, Actor* player, std::string outgoingKey) {
-		return GTS::ProteusWrapper::PrepareNewCharacter(player, outgoingKey);
+		// Always unmask before GTS snapshots its own canonical profile. The mask is
+		// only for Proteus's subsequent GetBaseActorValue-based character save.
+		GTS::ProteusSaveMask::Set(false);
+		const bool ok = GTS::ProteusWrapper::PrepareNewCharacter(player, outgoingKey);
+		if (ok) {
+			GTS::ProteusSaveMask::Set(true);
+			logger::error("ProteusWrapper: NEWCHAR STAT MASK ON key='{}'", outgoingKey);
+		}
+		return ok;
 	}
 
 	bool ProteusRestoreOutgoingNewCharacterActor(StaticFunctionTag*, Actor* outgoingActor, std::string diagnosticKey) {
 		(void)diagnosticKey;
+		// This hook runs after Proteus has saved and spawned the outgoing character.
+		// End the clean-base-AV window before the deferred Player reset/restore.
+		GTS::ProteusSaveMask::Set(false);
+		logger::error("ProteusWrapper: NEWCHAR STAT MASK OFF before outgoing restore");
 		return GTS::ProteusWrapper::RestoreOutgoingNewCharacterActor(outgoingActor);
 	}
 
 	bool ProteusFinalizeNewCharacter(StaticFunctionTag*, Actor* player) {
+		// Safety: never let an abandoned/misaligned transaction leak the mask into
+		// normal gameplay.
+		GTS::ProteusSaveMask::Set(false);
 		return GTS::ProteusWrapper::FinalizeNewCharacter(player);
 	}
 
 	bool ProteusBeginSwitch(StaticFunctionTag*, Actor* player, Actor* outgoingActor, std::string outgoingKey) {
+		GTS::ProteusSaveMask::Set(false);
 		return GTS::ProteusWrapper::BeginSwitch(player, outgoingActor, outgoingKey);
 	}
 
 	bool ProteusPrepareSwitch(StaticFunctionTag*, Actor* player, std::string outgoingKey) {
-		return GTS::ProteusWrapper::PrepareSwitch(player, outgoingKey);
+		GTS::ProteusSaveMask::Set(false);
+		const bool ok = GTS::ProteusWrapper::PrepareSwitch(player, outgoingKey);
+		if (ok) {
+			GTS::ProteusSaveMask::Set(true);
+			logger::error("ProteusWrapper: SWITCH STAT MASK ON key='{}'", outgoingKey);
+		}
+		return ok;
 	}
 
 	bool ProteusRestoreOutgoingSwitchActor(StaticFunctionTag*, Actor* outgoingActor, std::string diagnosticKey) {
 		(void)diagnosticKey;
+		GTS::ProteusSaveMask::Set(false);
+		logger::error("ProteusWrapper: SWITCH STAT MASK OFF before outgoing restore");
 		return GTS::ProteusWrapper::RestoreOutgoingSwitchActor(outgoingActor);
 	}
 
 	bool ProteusFinishSwitch(StaticFunctionTag*, Actor* player, std::string incomingKey) {
+		GTS::ProteusSaveMask::Set(false);
 		return GTS::ProteusWrapper::FinishSwitch(player, incomingKey);
 	}
 

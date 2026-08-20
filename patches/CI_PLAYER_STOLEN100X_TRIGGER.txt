@@ -1,10 +1,3 @@
 CI trigger for Player Full Assimilation stolen-attribute earning/distribution 100x.
 NPC copied/stored bonuses remain 1x.
-Run against deterministic overlay.
-Final trigger.
 Deferred reset after Proteus outgoing save/spawn.
-Ready for DLL build.
-PR refresh.
-Build marker.
-Build marker 2.
-Build marker final.
